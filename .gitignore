@@ -1,0 +1,4 @@
+_referencia/
+node_modules/
+.env*
+.vercel/
