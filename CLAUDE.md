@@ -126,7 +126,7 @@ Lista de candidatas. **O Leandro escolhe o que entra e em que ordem.**
 | **Vercel** | Um projeto por módulo, mais o Manager | Time `leandro-almeida` (`team_I9HWJ05Q3w6Nji6YZnrbSttA`) · Manager em **lsw-manager.vercel.app** | ✅ ok (projetos a criar) |
 | **Google Drive** | Ideias e código de referência (somente leitura) | conta logicsynapsesweb, pasta raiz abaixo | ✅ ok |
 | **Backup local** | Código do lsw-DashBI original | `lsw-dashbi-backup-2026-11-10.zip` (29 arquivos, 1,8 MB), no computador do Leandro | ✅ ok |
-| Supabase / Neon | Banco real | — | fora da v1 |
+| **Neon** (Postgres) | Banco das bases fictícias, quando elas subirem | a criar | decidido em 12/11/2026; **ainda não integrar** — até lá tudo roda no navegador (DuckDB + localStorage), atrás da mesma API |
 
 Projetos que **não** devem ser alterados: na Vercel `leandro-almeida`, `planejamento_grupoelo` e `loginpage-plan` (servem o planejamento-elo.vercel.app); tudo da conta `plangrupoelo`; o site antigo `lsw-dashbi.vercel.app`.
 
@@ -300,7 +300,8 @@ Prioridade MoSCoW: **M** = obrigatório · **S** = deveria · **C** = se der · 
 | F12 | Levantar as melhorias do planejamento-elo (diff) e o Leandro escolher | S | F0 |
 | F13 | Apresentação e Tutorial atualizados com os 8 módulos | S | F3–F11 |
 | F14 | Painel de CSAT | C | F12 |
-| F15 | Banco e login reais por trás da mesma API | W | — |
+| F15 | Banco (Neon) e login reais por trás da mesma API | W | — |
+| F16 | Acesso de clientes: perfil "Cliente" que vê só o Painel de Dashboards, com relatórios liberados por cliente | W | F6, F15 |
 
 ### Passos por frente
 
@@ -539,11 +540,13 @@ Premissas:
 - [ ] F12 — melhorias do planejamento-elo (o Leandro escolhe)
 - [ ] F13 — Apresentação e Tutorial
 - [ ] (C) F14 — painel de CSAT
-- [ ] (W) F15 — banco e login reais
+- [ ] (W) F15 — banco (Neon) e login reais
+- [ ] (W) F16 — acesso de clientes só a relatórios liberados (pensar depois)
 
 ## 18. Histórico
 
 - 11/11/2026 — v1: plano criado; endereço lsw-manager.vercel.app; dados fictícios obrigatórios; conta plangrupoelo fora do projeto.
+- 12/11/2026 — prioridade passa a ser o **Estúdio** (editor de consultas no estilo Power Query com linguagem M, relacionamentos entre tabelas, central de funções e, depois, leitor de fórmulas). Banco: **Neon**, integrado só quando as bases fictícias subirem. Acesso de clientes registrado como F16. Skill `paleta-proativa` criada em `.claude/skills/`.
 - 11/11/2026 — v2: repositório `lsw-manager` criado; separação em 8 módulos independentes acessados pelo Manager via API e rotas; configuração de usuários melhorada; fonte de 1 a 15 (8 = padrão); pastas 04 e 05 liberadas como ideia, com dados fictícios.
 
 ## 19. Próximo passo
