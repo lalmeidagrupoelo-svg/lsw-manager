@@ -204,6 +204,13 @@ table.grade { border-collapse: separate; border-spacing: 0; font-size: var(--fs-
 select.cond-junta { color: var(--link); padding: 7px 4px; }
 .cond-onde { color: var(--muted); font-weight: 600; }
 .cond.incompleta [data-campo="val"] { border-color: var(--warn); }
+.grupo-f { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; align-items: start; }
+.grupo-f > .cond-junta { margin-top: 10px; }
+.grupo-caixa { border: 1px dashed var(--border-strong); border-left: 3px solid var(--link); border-radius: 8px; padding: 8px 10px 10px; display: grid; gap: 8px; background: var(--surface-2); }
+.grupo-topo { display: flex; align-items: center; justify-content: space-between; font: 600 var(--fs-11) var(--f-mono); color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.grupo-caixa .cond { grid-template-columns: 56px minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1.3fr) 30px; }
+.lendo { margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--border); color: var(--text); font-weight: 500; }
+.lendo span { font: 600 var(--fs-11) var(--f-mono); color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-right: 4px; }
 .cond-valor { position: relative; display: flex; min-width: 0; }
 .cond-valor input { padding-right: 30px; }
 .cond-abrir { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); width: 26px; height: 26px; border: 0; background: none; color: var(--muted); border-radius: 4px; }

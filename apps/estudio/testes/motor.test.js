@@ -145,17 +145,26 @@ teste('E2: barra de fórmula troca uma etapa', () => {
   assert.deepStrictEqual(dados, { tipo: 'filtrar', expr: '[CANAL] = "CHAT"' });
 });
 
-teste('filtro: formulário → M → formulário volta igual', () => {
-  const conds = [
-    { junta: null, coluna: 'OPERAÇÃO', operador: 'diferente', valor: 'SAC' },
-    { junta: 'and', coluna: 'CANAL', operador: 'naoVazio', valor: '' },
-    { junta: 'or', coluna: 'DATA', operador: 'maiorIgual', valor: '05/11/2026' },
-  ];
+teste('filtro: um conector por nível e grupos viram parênteses (ida e volta)', () => {
   const tipos = { OPERAÇÃO: 'texto', CANAL: 'texto', DATA: 'data' };
-  const expr = M.juntarCondicoes(conds.map(c => ({ junta: c.junta, expr: M.exprCondicao(c.coluna, c.operador, c.valor, tipos[c.coluna]) })));
-  assert.strictEqual(expr, '([OPERAÇÃO] <> "SAC" and [CANAL] <> null and [CANAL] <> "") or [DATA] >= #date(2026, 11, 5)');
-  assert.deepStrictEqual(M.condicoesDeExpr(expr), conds);
-  assert.strictEqual(M.condicoesDeExpr('[A] = 1 and ([B] = 2 or [C] = 3)'), null, 'parênteses no meio não cabem no formulário');
+  const filtro = { junta: 'and', itens: [
+    { coluna: 'OPERAÇÃO', operador: 'igual', valor: 'COBRANÇA' },
+    { grupo: true, junta: 'or', conds: [{ coluna: 'CANAL', operador: 'igual', valor: 'CHAT' }, { coluna: 'DATA', operador: 'igual', valor: '04/11/2026' }] },
+  ] };
+  const expr = M.montarFiltro(filtro, tipos);
+  assert.strictEqual(expr, '[OPERAÇÃO] = "COBRANÇA" and ([CANAL] = "CHAT" or [DATA] = #date(2026, 11, 4))');
+  assert.deepStrictEqual(M.lerFiltro(expr), filtro);
+  assert.strictEqual(M.lerFiltroEmPortugues(filtro), 'OPERAÇÃO é igual a "COBRANÇA" E ( CANAL é igual a "CHAT" OU DATA é igual a "04/11/2026" )');
+  const c = M.consultaDeCsv('a', 'atendimentos.csv', csv);
+  M.inserirEtapa(c, { tipo: 'filtrar', expr });
+  assert.strictEqual(M.executar(c).tabela.linhas.length, 15, 'só Cobrança, do chat ou do dia 04/11');
+  assert.deepStrictEqual(M.lerFiltro('([OPERAÇÃO] = "COBRANÇA" and [CANAL] = "CHAT") or [DATA] = #date(2026, 11, 4)'), { junta: 'or', itens: [
+    { grupo: true, junta: 'and', conds: [{ coluna: 'OPERAÇÃO', operador: 'igual', valor: 'COBRANÇA' }, { coluna: 'CANAL', operador: 'igual', valor: 'CHAT' }] },
+    { coluna: 'DATA', operador: 'igual', valor: '04/11/2026' },
+  ] }, 'o filtro antigo (A e B) ou C volta como grupo');
+  const nv = { junta: 'or', itens: [{ coluna: 'CANAL', operador: 'naoVazio', valor: '' }, { coluna: 'OPERAÇÃO', operador: 'igual', valor: 'SAC' }] };
+  assert.deepStrictEqual(M.lerFiltro(M.montarFiltro(nv, tipos)), nv);
+  assert.strictEqual(M.lerFiltro('[A] = 1 and ([B] = 2 or ([C] = 3 and [D] = 4))'), null, 'grupo dentro de grupo fica no Avançado');
 });
 
 console.log(`\n${ok} testes passaram.`);

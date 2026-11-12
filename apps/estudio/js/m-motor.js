@@ -534,10 +534,30 @@
     return op.semValor ? op.expr(c) : op.expr(c, literalM(valor, op.soTexto ? 'texto' : tipo));
   }
 
-  // Caminho de volta do formulário de filtro: lê a expressão e devolve as linhas
-  // [{ junta, coluna, operador, valor }]. Devolve null se a expressão foi escrita à mão
-  // de um jeito que o formulário não representa (aí a janela abre na aba Avançado).
-  function condicoesDeExpr(expr) {
+  /* ---------------- filtro do formulário ↔ M ----------------
+     Modelo do formulário (sem ambiguidade): em cada nível vale UM conector só.
+       { junta: 'and'|'or', itens: [ cond | { grupo: true, junta, conds: [cond, ...] } ] }
+       cond = { coluna, operador, valor }
+     Para misturar E com OU usa-se um grupo, que vira parênteses no M. */
+  function montarFiltro(filtro, tipos = {}) {
+    const um = c => OPERADORES[c.operador].semValor ? OPERADORES[c.operador].expr('[' + c.coluna + ']') : exprCondicao(c.coluna, c.operador, c.valor, tipos[c.coluna]);
+    // "não está vazio" é um "and" por dentro: vai entre parênteses quando está no meio de um "or"
+    const parte = (c, juntaDeFora) => { const e = um(c); return c.operador === 'naoVazio' && juntaDeFora === 'or' ? `(${e})` : e; };
+    const partes = filtro.itens.map(it => {
+      if (!it.grupo) return parte(it, filtro.itens.length > 1 ? filtro.junta : null);
+      const ps = it.conds.map(c => parte(c, it.conds.length > 1 ? it.junta : filtro.junta));
+      return ps.length > 1 ? `(${ps.join(` ${it.junta} `)})` : ps[0];
+    });
+    return partes.join(` ${filtro.junta} `);
+  }
+  // Frase em português do filtro, para a pessoa conferir como ele será lido
+  function lerFiltroEmPortugues(filtro) {
+    const J = { and: 'E', or: 'OU' };
+    const um = c => `${c.coluna} ${OPERADORES[c.operador].rotulo}${OPERADORES[c.operador].semValor ? '' : ` "${c.valor}"`}`;
+    return filtro.itens.map(it => it.grupo ? (it.conds.length > 1 ? `( ${it.conds.map(um).join(` ${J[it.junta]} `)} )` : um(it.conds[0])) : um(it)).join(` ${J[filtro.junta]} `);
+  }
+  // Caminho de volta: lê a expressão M e devolve o modelo do formulário (ou null se não cabe nele)
+  function lerFiltro(expr) {
     let arvore;
     try { arvore = analisar(semEach(expr)); } catch { return null; }
     const pad2 = n => String(n).padStart(2, '0');
@@ -552,55 +572,47 @@
     };
     const OP_BIN = { '=': 'igual', '<>': 'diferente', '>': 'maior', '>=': 'maiorIgual', '<': 'menor', '<=': 'menorIgual' };
     const OP_FN = { 'Text.Contains': 'contem', 'Text.StartsWith': 'comeca', 'Text.EndsWith': 'termina' };
+    const ehDifNulo = no => no.k === 'bin' && no.op === '<>' && no.a.k === 'col' && no.b.k === 'lit' && no.b.v === null;
+    const ehDifVazio = no => no.k === 'bin' && no.op === '<>' && no.a.k === 'col' && no.b.k === 'lit' && no.b.v === '';
     const condicao = no => {
+      if (no.k === 'bin' && no.op === 'and' && ehDifNulo(no.a) && ehDifVazio(no.b) && no.a.a.nome === no.b.a.nome) return { coluna: no.a.a.nome, operador: 'naoVazio', valor: '' };
       if (no.k === 'bin' && OP_BIN[no.op] && no.a.k === 'col') {
-        if (no.b.k === 'lit' && no.b.v === null && no.op === '=') return { coluna: no.a.nome, operador: 'vazio', valor: '' };
-        if (no.b.k === 'lit' && no.b.v === null && no.op === '<>') return { coluna: no.a.nome, operador: 'diferente', valor: null }; // metade do "não está vazio"
+        if (no.b.k === 'lit' && no.b.v === null) return no.op === '=' ? { coluna: no.a.nome, operador: 'vazio', valor: '' } : null;
         const v = valorDe(no.b); if (v !== undefined) return { coluna: no.a.nome, operador: OP_BIN[no.op], valor: v };
       }
-      if (no.k === 'fn' && OP_FN[no.nome] && no.args.length === 2 && no.args[0].k === 'col' && no.args[1].k === 'lit') return { coluna: no.args[0].nome, operador: OP_FN[no.nome], valor: no.args[1].v };
-      if (no.k === 'not' && no.a.k === 'fn' && no.a.nome === 'Text.Contains' && no.a.args[0].k === 'col' && no.a.args[1].k === 'lit') return { coluna: no.a.args[0].nome, operador: 'naoContem', valor: no.a.args[1].v };
+      if (no.k === 'fn' && OP_FN[no.nome] && no.args.length === 2 && no.args[0].k === 'col' && no.args[1].k === 'lit' && typeof no.args[1].v === 'string') return { coluna: no.args[0].nome, operador: OP_FN[no.nome], valor: no.args[1].v };
+      if (no.k === 'not' && no.a.k === 'fn' && no.a.nome === 'Text.Contains' && no.a.args.length === 2 && no.a.args[0].k === 'col' && no.a.args[1].k === 'lit') return { coluna: no.a.args[0].nome, operador: 'naoContem', valor: no.a.args[1].v };
       return null;
     };
-    // Achata a árvore da esquerda para a direita: ((c1 and c2) or c3) → c1, and c2, or c3
+    const ehLogico = no => no.k === 'bin' && (no.op === 'and' || no.op === 'or') && !condicao(no);
+    const achatar = (no, op) => (no.k === 'bin' && no.op === op && !condicao(no) ? [...achatar(no.a, op), ...achatar(no.b, op)] : [no]);
+    // numa lista de "and", junta "[C] <> null" + "[C] <> \"\"" de volta em "não está vazio"
+    const paraConds = (nos, op) => {
+      const out = [];
+      for (let i = 0; i < nos.length; i++) {
+        if (op === 'and' && ehDifNulo(nos[i]) && nos[i + 1] && ehDifVazio(nos[i + 1]) && nos[i].a.nome === nos[i + 1].a.nome) { out.push({ coluna: nos[i].a.nome, operador: 'naoVazio', valor: '' }); i++; continue; }
+        const c = condicao(nos[i]); if (!c) return null;
+        out.push(c);
+      }
+      return out;
+    };
+    const junta = ehLogico(arvore) ? arvore.op : 'and';
+    const nos = ehLogico(arvore) ? achatar(arvore, junta) : [arvore];
     const itens = [];
-    let no = arvore;
-    while (no.k === 'bin' && (no.op === 'and' || no.op === 'or') && !condicao(no)) {
-      const dir = condicao(no.b); if (!dir) return null;
-      itens.unshift({ junta: no.op, ...dir, no: no.b });
-      no = no.a;
+    for (let i = 0; i < nos.length; i++) {
+      const no = nos[i];
+      if (junta === 'and' && ehDifNulo(no) && nos[i + 1] && ehDifVazio(nos[i + 1]) && no.a.nome === nos[i + 1].a.nome) { itens.push({ coluna: no.a.nome, operador: 'naoVazio', valor: '' }); i++; continue; }
+      const c = condicao(no);
+      if (c) { itens.push(c); continue; }
+      if (ehLogico(no) && no.op !== junta) {
+        const conds = paraConds(achatar(no, no.op), no.op);
+        if (!conds) return null;
+        itens.push({ grupo: true, junta: no.op, conds });
+        continue;
+      }
+      return null; // grupo dentro de grupo, ou função que o formulário não tem
     }
-    const primeira = condicao(no); if (!primeira) return null;
-    itens.unshift({ junta: null, ...primeira, no });
-    // junta "[C] <> null" seguido de "and [C] <> \"\"" em "não está vazio"
-    const out = [];
-    for (let i = 0; i < itens.length; i++) {
-      const a = itens[i], b = itens[i + 1];
-      const ehNulo = x => x && x.no.k === 'bin' && x.no.op === '<>' && x.no.b.k === 'lit' && x.no.b.v === null;
-      const ehVazioTxt = x => x && x.no.k === 'bin' && x.no.op === '<>' && x.no.b.k === 'lit' && x.no.b.v === '';
-      if (ehNulo(a) && ehVazioTxt(b) && b.junta === 'and' && a.coluna === b.coluna) { out.push({ junta: a.junta, coluna: a.coluna, operador: 'naoVazio', valor: '' }); i++; continue; }
-      if (ehNulo(a)) return null;
-      out.push({ junta: a.junta, coluna: a.coluna, operador: a.operador, valor: a.valor });
-    }
-    // confere: montar de novo pelo formulário tem que dar a mesma conta (senão havia parênteses de outro jeito)
-    try {
-      const refeita = juntarCondicoes(out.map(c => ({ junta: c.junta, expr: OPERADORES[c.operador].semValor ? OPERADORES[c.operador].expr('[' + c.coluna + ']') : OPERADORES[c.operador].expr('[' + c.coluna + ']', c.valor === null ? 'null' : '§') })));
-      const forma = e => JSON.stringify(analisar(e), (k, v) => (k === 'v' ? undefined : v));
-      if (forma(refeita.replace(/§/g, '0')) !== forma(semEach(expr)).replace(/"k":"fn","nome":"#(date|time)","args":\[[^\]]*\]/g, '"k":"lit"').replace(/"k":"neg","a":\{"k":"lit"\}/g, '"k":"lit"') && forma(refeita.replace(/§/g, '0')) !== forma(semEach(expr))) return null;
-    } catch { return null; }
-    return out;
-  }
-
-  // Junta as condições do formulário lendo de cima para baixo: c1 E c2 OU c3 = (c1 E c2) OU c3
-  function juntarCondicoes(conds) {
-    let expr = '', opAnterior = null;
-    conds.forEach(({ junta, expr: e }, i) => {
-      if (i === 0) { expr = e; return; }
-      if (opAnterior && opAnterior !== junta) expr = `(${expr})`;
-      expr = `${expr} ${junta} ${e}`;
-      opAnterior = junta;
-    });
-    return expr;
+    return { junta, itens };
   }
 
   // Testa uma expressão nas primeiras linhas (prévia ao vivo da coluna personalizada)
@@ -774,7 +786,7 @@
 
   const api = {
     TIPOS, TIPO_DO_M, FUNCOES_M, ETAPAS, OPERADORES, ErroM, FalhaEtapa,
-    lerM, lerLinhaEtapa, dividirTopo, condicoesDeExpr, juntarCondicoes,
+    lerM, lerLinhaEtapa, dividirTopo, montarFiltro, lerFiltro, lerFiltroEmPortugues,
     ehErro, converter, formatar, detectarTipo, lerCsv, lerNumero, lerData,
     analisar, avaliar, colunasUsadas, gerarM, gerarMEtapa, executar, qualidade,
     consultaDeCsv, inserirEtapa, nomeUnico, exprCondicao, literalM, testarExpressao, idM,

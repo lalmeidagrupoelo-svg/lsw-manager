@@ -366,9 +366,10 @@ function janelaColunas(modo, pre) {
   });
 }
 
-// Filtrar linhas: lista de condições (+ acrescenta, × remove, E/OU antes de cada uma) ou expressão M.
-// Se a etapa selecionada já é um filtro, a janela EDITA esse filtro (como o Power Query):
-// vem preenchida e mostra os valores de antes do filtro. Senão, cria uma etapa nova.
+// Filtrar linhas: condições com E/OU na frente, grupos (parênteses) e aba Avançado (M).
+// Regra sem ambiguidade: em cada nível vale UM conector — trocar o E/OU de uma linha troca o das outras
+// do mesmo nível. Para misturar E com OU, usa-se "+ Adicionar grupo".
+// Se a etapa selecionada já é um filtro, a janela EDITA esse filtro (como o Power Query).
 function janelaFiltrar(pre) {
   const c = atual(); const idx = indiceEtapa();
   const editando = c.etapas[idx] && c.etapas[idx].tipo === 'filtrar';
@@ -376,9 +377,9 @@ function janelaFiltrar(pre) {
   if (!entrada.tabela) return aviso('A etapa anterior ao filtro está com erro; corrija-a antes de editar o filtro.', 'erro');
   const t = entrada.tabela;
   const exprAtual = editando ? c.etapas[idx].expr : '';
-  const condsAtuais = editando ? M.condicoesDeExpr(exprAtual) : null;
+  const filtroAtual = editando ? M.lerFiltro(exprAtual) : null;
+  const tipos = Object.fromEntries(t.colunas.map(x => [x.nome, x.tipo]));
   const ops = Object.entries(M.OPERADORES).map(([k, o]) => `<option value="${k}">${o.rotulo}</option>`).join('');
-  const tipoDe = nome => (t.colunas.find(x => x.nome === nome) || {}).tipo;
   const cacheValores = {};
   const valoresDe = nome => {
     if (cacheValores[nome]) return cacheValores[nome];
@@ -387,30 +388,40 @@ function janelaFiltrar(pre) {
     for (const l of t.linhas) { const v = l[k]; if (v !== null && !M.ehErro(v) && v !== '') vistos.add(M.formatar(v, t.colunas[k].tipo)); if (vistos.size >= 200) break; }
     return (cacheValores[nome] = [...vistos].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true })));
   };
-  const htmlCondicao = (cond, primeira) => `<div class="cond">
-      ${primeira ? '<span class="cond-junta cond-onde">Onde</span>' : `<select class="cond-junta" data-campo="junta" aria-label="Como juntar com a condição de cima"><option value="and" ${cond.junta === 'or' ? '' : 'selected'}>E</option><option value="or" ${cond.junta === 'or' ? 'selected' : ''}>OU</option></select>`}
-      <select data-campo="col" aria-label="Coluna">${opcoesColunas(t, cond.coluna)}</select>
-      <select data-campo="op" aria-label="Condição">${ops.replace(`value="${cond.operador || 'igual'}"`, `value="${cond.operador || 'igual'}" selected`)}</select>
+  const juntaHtml = (primeira, junta) => primeira ? '<span class="cond-junta cond-onde">Onde</span>'
+    : `<select class="cond-junta" data-campo="junta" aria-label="Conector (vale para todo este nível)"><option value="and" ${junta === 'or' ? '' : 'selected'}>E</option><option value="or" ${junta === 'or' ? 'selected' : ''}>OU</option></select>`;
+  const htmlCond = (cd, primeira, junta) => `<div class="cond" data-item>
+      ${juntaHtml(primeira, junta)}
+      <select data-campo="col" aria-label="Coluna">${opcoesColunas(t, cd.coluna)}</select>
+      <select data-campo="op" aria-label="Condição">${ops.replace(`value="${cd.operador || 'igual'}"`, `value="${cd.operador || 'igual'}" selected`)}</select>
       <div class="cond-valor">
-        <input type="text" data-campo="val" value="${esc(cond.valor || '')}" aria-label="Valor" autocomplete="off">
+        <input type="text" data-campo="val" value="${esc(cd.valor || '')}" aria-label="Valor" autocomplete="off">
         <button type="button" class="cond-abrir" data-abrir-valores tabindex="-1" aria-label="Ver os valores da coluna">▾</button>
         <ul class="cond-sugestoes" role="listbox" hidden></ul>
       </div>
       <button class="cond-x" type="button" data-remover-cond aria-label="Remover esta condição" title="Remover esta condição">×</button>
     </div>`;
-  const iniciais = condsAtuais ? condsAtuais.slice() : [{ coluna: pre, operador: 'igual', valor: '' }];
-  // veio do menu de outra coluna enquanto edita: acrescenta uma condição para ela
-  if (condsAtuais && pre && !condsAtuais.some(x => x.coluna === pre)) iniciais.push({ junta: 'and', coluna: pre, operador: 'igual', valor: '' });
-  const comecaAvancado = editando && !condsAtuais;
+  const htmlGrupo = (g, primeira, junta) => `<div class="grupo-f" data-item>
+      ${juntaHtml(primeira, junta)}
+      <div class="grupo-caixa">
+        <div class="grupo-topo"><span>Grupo · entre parênteses</span><button class="cond-x" type="button" data-remover-grupo aria-label="Remover o grupo" title="Remover o grupo inteiro">×</button></div>
+        <div class="conds" data-nivel>${g.conds.map((cd, i) => htmlCond(cd, i === 0, g.junta)).join('')}</div>
+        <div><button class="btn peq" type="button" data-mais-no-grupo>+ Condição no grupo</button></div>
+      </div>
+    </div>`;
+  const htmlFiltro = f => f.itens.map((it, i) => it.grupo ? htmlGrupo(it, i === 0, f.junta) : htmlCond(it, i === 0, f.junta)).join('');
+  let inicial = filtroAtual ? JSON.parse(JSON.stringify(filtroAtual)) : { junta: 'and', itens: [{ coluna: pre, operador: 'igual', valor: '' }] };
+  if (filtroAtual && pre && !JSON.stringify(filtroAtual).includes(JSON.stringify(pre))) inicial.itens.push({ coluna: pre, operador: 'igual', valor: '' }); // veio do menu de outra coluna
+  const comecaAvancado = editando && !filtroAtual;
   abrirJanela({
     titulo: editando ? `Editar filtro · ${c.etapas[idx].nome}` : 'Filtrar linhas', largo: true, ok: editando ? 'Salvar filtro' : 'Aplicar',
     corpo: `${editando ? `<p class="ajuda">Você está editando a etapa <b>${esc(c.etapas[idx].nome)}</b>. Os valores mostrados são os de <b>antes</b> do filtro, então dá para trocar por qualquer outro.</p>` : ''}
       <div class="abas" role="tablist"><button type="button" class="${comecaAvancado ? '' : 'on'}" data-aba="basico">Básico</button><button type="button" class="${comecaAvancado ? 'on' : ''}" data-aba="avancado">Avançado (M)</button></div>
       <div id="aba-basico" class="campo" style="gap:8px" ${comecaAvancado ? 'hidden' : ''}>
         <span class="rotulo">Manter as linhas em que</span>
-        <div id="f-conds" class="conds">${iniciais.map((cd, i) => htmlCondicao(cd, i === 0)).join('')}</div>
-        <div><button class="btn peq" type="button" id="f-mais">+ Adicionar condição</button></div>
-        <p class="ajuda">As condições são lidas de cima para baixo. <b>E</b>: as duas precisam valer. <b>OU</b>: basta uma valer. Misturando E e OU, o que está acima vira um bloco entre parênteses. Para achar linhas sem valor, use "está vazio".</p>
+        <div id="f-conds" class="conds" data-nivel>${htmlFiltro(inicial)}</div>
+        <div class="acoes"><button class="btn peq" type="button" id="f-mais">+ Adicionar condição</button><button class="btn peq" type="button" id="f-grupo">+ Adicionar grupo</button></div>
+        <p class="ajuda"><b>E</b>: todas precisam valer. <b>OU</b>: basta uma valer. No mesmo nível vale um conector só; para misturar (ex.: COBRANÇA <b>E</b> (CHAT <b>OU</b> dia 04/11)), crie um <b>grupo</b>. Para achar linhas sem valor, use "está vazio".</p>
       </div>
       <div id="aba-avancado" class="campo" ${comecaAvancado ? '' : 'hidden'}>
         <label for="f-expr">Condição em M</label>
@@ -420,18 +431,38 @@ function janelaFiltrar(pre) {
       <div class="resultado" id="f-res">—</div>`,
     aoAbrir() {
       let aba = comecaAvancado ? 'avancado' : 'basico';
-      const linhas = () => [...$('f-conds').querySelectorAll('.cond')];
-      const campo = (el, nome) => el.querySelector(`[data-campo="${nome}"]`);
-      const montar = () => {
-        if (aba === 'avancado') return $('f-expr').value.trim();
-        const conds = linhas().map((el, i) => {
-          const col = campo(el, 'col').value, op = campo(el, 'op').value, val = campo(el, 'val').value;
-          if (!M.OPERADORES[op].semValor && val.trim() === '') throw new M.FalhaEtapa(`A condição ${i + 1} está sem valor. Escolha um valor, use "está vazio" ou remova a condição no ×.`);
-          return { junta: i ? campo(el, 'junta').value : null, expr: M.exprCondicao(col, op, val, tipoDe(col)) };
-        });
-        return M.juntarCondicoes(conds);
+      const raiz = $('f-conds');
+      const itensDe = nivel => [...nivel.children].filter(x => x.matches('[data-item]'));
+      const campo = (el, nome) => el.querySelector(`:scope > [data-campo="${nome}"], :scope > .cond-valor > [data-campo="${nome}"]`);
+      const juntaDoNivel = nivel => { const s = itensDe(nivel).map(x => x.querySelector(':scope > [data-campo="junta"]')).find(Boolean); return s ? s.value : 'and'; };
+      // Lê o formulário e devolve o modelo { junta, itens }
+      const lerCond = (el, n) => {
+        const cd = { coluna: campo(el, 'col').value, operador: campo(el, 'op').value, valor: campo(el, 'val').value };
+        if (!M.OPERADORES[cd.operador].semValor && cd.valor.trim() === '') throw new M.FalhaEtapa(`A condição ${n} está sem valor. Escolha um valor, use "está vazio" ou remova a condição no ×.`);
+        return cd;
       };
-      // Lista de valores própria: mostra TODOS os valores da coluna ao abrir, e filtra só pelo que for digitado
+      const lerModelo = () => {
+        let n = 0;
+        const itens = itensDe(raiz).map(el => {
+          if (!el.classList.contains('grupo-f')) return lerCond(el, ++n);
+          const nivel = el.querySelector('[data-nivel]');
+          return { grupo: true, junta: juntaDoNivel(nivel), conds: itensDe(nivel).map(x => lerCond(x, ++n)) };
+        });
+        return { junta: juntaDoNivel(raiz), itens };
+      };
+      const montar = () => aba === 'avancado' ? $('f-expr').value.trim() : M.montarFiltro(lerModelo(), tipos);
+      // Primeiro item de cada nível mostra "Onde"; os outros, o seletor E/OU com o conector do nível
+      const arrumarNivel = nivel => {
+        const j = juntaDoNivel(nivel);
+        itensDe(nivel).forEach((el, i) => {
+          const atual = el.querySelector(':scope > .cond-junta');
+          const html = juntaHtml(i === 0, j);
+          if (i === 0 && atual.tagName !== 'SPAN') atual.outerHTML = html;
+          if (i > 0 && atual.tagName === 'SPAN') atual.outerHTML = html;
+          if (i > 0) el.querySelector(':scope > .cond-junta').value = j;
+        });
+      };
+      const arrumarTudo = () => { arrumarNivel(raiz); raiz.querySelectorAll('.grupo-f [data-nivel]').forEach(arrumarNivel); };
       const mostrarValores = (el, filtrarPorTexto) => {
         const lista = el.querySelector('.cond-sugestoes'); const input = campo(el, 'val');
         if (input.disabled) return;
@@ -440,65 +471,84 @@ function janelaFiltrar(pre) {
         lista.innerHTML = vals.length ? vals.map(v => `<li role="option" data-valor="${esc(v)}" class="${v === input.value ? 'on' : ''}">${v !== v.trim() ? `<span class="mono">"${esc(v)}"</span> <small>tem espaços sobrando</small>` : esc(v)}</li>`).join('') : '<li class="vazio">Nenhum valor com esse texto</li>';
         lista.hidden = false;
       };
-      const fecharValores = () => $('f-conds').querySelectorAll('.cond-sugestoes').forEach(l => { l.hidden = true; });
+      const fecharValores = () => raiz.querySelectorAll('.cond-sugestoes').forEach(l => { l.hidden = true; });
       const atualizar = () => {
-        const todas = linhas();
-        todas.forEach(el => {
+        const conds = [...raiz.querySelectorAll('.cond')];
+        conds.forEach(el => {
           const col = campo(el, 'col').value; const op = M.OPERADORES[campo(el, 'op').value];
-          const val = campo(el, 'val'); const tipo = tipoDe(col);
+          const val = campo(el, 'val'); const tipo = tipos[col];
           val.disabled = op.semValor; el.querySelector('[data-abrir-valores]').disabled = op.semValor;
           val.placeholder = op.semValor ? '—' : tipo === 'data' ? 'dd/mm/aaaa' : tipo === 'hora' ? 'hh:mm' : tipo === 'inteiro' || tipo === 'decimal' ? 'ex.: 40' : 'escolha ou digite';
           el.classList.toggle('incompleta', !op.semValor && val.value.trim() === '');
-          el.querySelector('[data-remover-cond]').hidden = todas.length === 1;
+          el.querySelector('[data-remover-cond]').hidden = conds.length === 1;
         });
         try {
           const expr = montar();
           if (!expr) { $('f-res').className = 'resultado'; $('f-res').textContent = 'Escreva a condição.'; return; }
           const arvore = M.analisar(expr.replace(/^each\s+/, ''));
-          M.colunasUsadas(arvore).forEach(x => { if (!tipoDe(x)) throw new M.FalhaEtapa(`A coluna "${x}" não existe nesta etapa.`); });
+          M.colunasUsadas(arvore).forEach(x => { if (!tipos[x]) throw new M.FalhaEtapa(`A coluna "${x}" não existe nesta etapa.`); });
           const objeto = l => Object.fromEntries(t.colunas.map((x, k) => [x.nome, l[k]]));
           let ficam = 0;
           for (const l of t.linhas) { const r = M.avaliar(arvore, objeto(l)); if (M.ehErro(r)) throw new M.FalhaEtapa(r.mensagem); if (r === true) ficam++; }
+          const modelo = aba === 'basico' ? lerModelo() : M.lerFiltro(expr);
           $('f-res').className = 'resultado ' + (ficam ? 'ok' : 'ruim');
-          $('f-res').innerHTML = `Ficam <b>${ficam.toLocaleString('pt-BR')}</b> de ${t.linhas.length.toLocaleString('pt-BR')} linhas.${ficam ? '' : ' Nenhuma linha atende a todas as condições: confira os valores e o E/OU.'}<br><span class="mono">Table.SelectRows(..., each ${esc(expr.replace(/^each\s+/, ''))})</span>`;
+          $('f-res').innerHTML = `${modelo ? `<div class="lendo"><span>Lendo como:</span> ${esc(M.lerFiltroEmPortugues(modelo))}</div>` : ''}
+            Ficam <b>${ficam.toLocaleString('pt-BR')}</b> de ${t.linhas.length.toLocaleString('pt-BR')} linhas.${ficam ? '' : ' Nenhuma linha atende: confira os valores, o E/OU e os grupos.'}<br><span class="mono">Table.SelectRows(..., each ${esc(expr.replace(/^each\s+/, ''))})</span>`;
         } catch (e) { $('f-res').className = 'resultado ruim'; $('f-res').textContent = e.message; }
       };
+      const colunaPadrao = () => { const todas = raiz.querySelectorAll('.cond'); return todas.length ? campo(todas[todas.length - 1], 'col').value : pre; };
       $('f-mais').addEventListener('click', () => {
-        const todas = linhas(); const ultima = todas[todas.length - 1];
-        const junta = todas.length > 1 ? campo(ultima, 'junta').value : 'and'; // repete o E/OU da linha de cima
-        $('f-conds').insertAdjacentHTML('beforeend', htmlCondicao({ junta, coluna: campo(ultima, 'col').value, operador: 'igual', valor: '' }, false));
-        const nova = linhas().pop(); campo(nova, 'val').focus();
-        atualizar();
+        raiz.insertAdjacentHTML('beforeend', htmlCond({ coluna: colunaPadrao(), operador: 'igual', valor: '' }, false, juntaDoNivel(raiz)));
+        arrumarTudo(); campo(itensDe(raiz).pop(), 'val').focus(); atualizar();
       });
-      $('f-conds').addEventListener('click', ev => {
-        const x = ev.target.closest('[data-remover-cond]');
-        if (x) {
-          x.closest('.cond').remove();
-          const j = campo(linhas()[0], 'junta');
-          if (j) j.outerHTML = '<span class="cond-junta cond-onde">Onde</span>'; // a de cima não tem E/OU
-          return atualizar();
+      $('f-grupo').addEventListener('click', () => {
+        const juntaFora = itensDe(raiz).length > 1 ? juntaDoNivel(raiz) : 'and';
+        const col = colunaPadrao();
+        raiz.insertAdjacentHTML('beforeend', htmlGrupo({ junta: juntaFora === 'and' ? 'or' : 'and', conds: [{ coluna: col, operador: 'igual', valor: '' }, { coluna: col, operador: 'igual', valor: '' }] }, false, juntaFora));
+        arrumarTudo(); const g = itensDe(raiz).pop(); g.querySelector('[data-campo="val"]').focus(); atualizar();
+      });
+      raiz.addEventListener('click', ev => {
+        const xc = ev.target.closest('[data-remover-cond]');
+        if (xc) {
+          const el = xc.closest('.cond'); const grupo = el.closest('.grupo-f'); el.remove();
+          if (grupo && !grupo.querySelector('.cond')) grupo.remove();
+          arrumarTudo(); return atualizar();
+        }
+        const xg = ev.target.closest('[data-remover-grupo]');
+        if (xg) { xg.closest('.grupo-f').remove(); if (!raiz.querySelector('.cond')) raiz.insertAdjacentHTML('beforeend', htmlCond({ coluna: pre, operador: 'igual', valor: '' }, true, 'and')); arrumarTudo(); return atualizar(); }
+        const mg = ev.target.closest('[data-mais-no-grupo]');
+        if (mg) {
+          const nivel = mg.closest('.grupo-caixa').querySelector('[data-nivel]');
+          nivel.insertAdjacentHTML('beforeend', htmlCond({ coluna: colunaPadrao(), operador: 'igual', valor: '' }, false, juntaDoNivel(nivel)));
+          arrumarTudo(); campo(itensDe(nivel).pop(), 'val').focus(); return atualizar();
         }
         const abrir = ev.target.closest('[data-abrir-valores]');
-        if (abrir) { const el = abrir.closest('.cond'); const l = el.querySelector('.cond-sugestoes'); if (l.hidden) { fecharValores(); mostrarValores(el, false); campo(el, 'val').focus(); } else l.hidden = true; return; }
+        if (abrir) { const el = abrir.closest('.cond'); const l = el.querySelector('.cond-sugestoes'); if (l.hidden) { fecharValores(); mostrarValores(el, false); campo(el, 'val').focus(); } else l.hidden = true; }
       });
-      // escolher um valor da lista (mousedown, para não perder o foco antes)
-      $('f-conds').addEventListener('mousedown', ev => {
+      // trocar o E/OU de uma linha troca o das outras do mesmo nível
+      raiz.addEventListener('change', ev => {
+        if (ev.target.matches('[data-campo="junta"]')) {
+          const nivel = ev.target.closest('[data-nivel]');
+          itensDe(nivel).forEach(el => { const s = el.querySelector(':scope > [data-campo="junta"]'); if (s) s.value = ev.target.value; });
+        }
+        if (ev.target.matches('[data-campo="col"]')) campo(ev.target.closest('.cond'), 'val').value = '';
+      });
+      raiz.addEventListener('mousedown', ev => {
         const li = ev.target.closest('[data-valor]'); if (!li) return;
         ev.preventDefault();
         const el = li.closest('.cond'); campo(el, 'val').value = li.dataset.valor;
         fecharValores(); atualizar();
       });
-      $('f-conds').addEventListener('focusin', ev => { if (ev.target.matches('[data-campo="val"]')) { fecharValores(); mostrarValores(ev.target.closest('.cond'), false); } });
-      $('f-conds').addEventListener('focusout', ev => { if (ev.target.matches('[data-campo="val"]')) setTimeout(() => { if (!ev.target.closest('.cond').contains(document.activeElement)) ev.target.closest('.cond').querySelector('.cond-sugestoes').hidden = true; }, 120); });
-      $('f-conds').addEventListener('input', ev => { if (ev.target.matches('[data-campo="val"]')) mostrarValores(ev.target.closest('.cond'), true); });
-      $('f-conds').addEventListener('keydown', ev => { if (ev.key === 'Escape' && ev.target.matches('[data-campo="val"]')) { ev.stopPropagation(); fecharValores(); } });
-      $('f-conds').addEventListener('change', ev => { if (ev.target.matches('[data-campo="col"]')) campo(ev.target.closest('.cond'), 'val').value = ''; });
+      raiz.addEventListener('focusin', ev => { if (ev.target.matches('[data-campo="val"]')) { fecharValores(); mostrarValores(ev.target.closest('.cond'), false); } });
+      raiz.addEventListener('focusout', ev => { if (ev.target.matches('[data-campo="val"]')) setTimeout(() => { const el = ev.target.closest('.cond'); if (el && !el.contains(document.activeElement)) el.querySelector('.cond-sugestoes').hidden = true; }, 120); });
+      raiz.addEventListener('input', ev => { if (ev.target.matches('[data-campo="val"]')) mostrarValores(ev.target.closest('.cond'), true); });
+      raiz.addEventListener('keydown', ev => { if (ev.key === 'Escape' && ev.target.matches('[data-campo="val"]')) { ev.stopPropagation(); fecharValores(); } });
       $('modal-corpo').querySelectorAll('[data-aba]').forEach(b => b.addEventListener('click', () => {
         if (b.dataset.aba === 'avancado' && aba === 'basico') { try { const e = montar(); if (e && !$('f-expr').value.trim()) $('f-expr').value = 'each ' + e; } catch { /* formulário incompleto: começa vazio */ } }
-        if (b.dataset.aba === 'basico' && aba === 'avancado') {
-          const conds = M.condicoesDeExpr($('f-expr').value.trim());
-          if ($('f-expr').value.trim() && !conds) { $('f-res').className = 'resultado ruim'; $('f-res').textContent = 'Esta condição em M não cabe no modo Básico (tem parênteses no meio ou funções diferentes). Continue no Avançado.'; return; }
-          if (conds) $('f-conds').innerHTML = conds.map((cd, i) => htmlCondicao(cd, i === 0)).join('');
+        if (b.dataset.aba === 'basico' && aba === 'avancado' && $('f-expr').value.trim()) {
+          const f = M.lerFiltro($('f-expr').value.trim());
+          if (!f) { $('f-res').className = 'resultado ruim'; $('f-res').textContent = 'Esta condição em M não cabe no modo Básico (tem grupo dentro de grupo ou funções diferentes). Continue no Avançado.'; return; }
+          raiz.innerHTML = htmlFiltro(f);
         }
         aba = b.dataset.aba;
         $('modal-corpo').querySelectorAll('[data-aba]').forEach(x => x.classList.toggle('on', x === b));
@@ -508,14 +558,14 @@ function janelaFiltrar(pre) {
       $('modal-corpo').addEventListener('input', atualizar);
       $('modal-corpo').addEventListener('change', atualizar);
       ui.montarFiltro = montar;
-      atualizar();
+      arrumarTudo(); atualizar();
     },
     aoConfirmar() {
       let expr;
       try { expr = ui.montarFiltro(); } catch (e) { return e.message; }
       if (!expr) return 'Escreva a condição do filtro.';
       M.analisar(expr.replace(/^each\s+/, ''));
-      if ($('f-res').classList.contains('ruim') && !/^Ficam/.test($('f-res').textContent)) return $('f-res').textContent;
+      if ($('f-res').classList.contains('ruim') && !/Ficam/.test($('f-res').textContent)) return $('f-res').textContent;
       const nova = expr.replace(/^each\s+/, '');
       if (!editando) return adicionarEtapa({ tipo: 'filtrar', expr: nova });
       c.etapas[idx] = { ...c.etapas[idx], expr: nova };

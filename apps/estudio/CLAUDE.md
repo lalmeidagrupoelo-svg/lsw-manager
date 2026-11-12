@@ -52,7 +52,7 @@ Ferramenta para **montar bases e relatórios** no estilo Power BI, dentro do nav
 ## Etapas do Estúdio (pendências do módulo)
 
 - [x] **E1** — Transformar dados: 6 ferramentas, etapas aplicadas, prévia por etapa, qualidade da coluna, código M só leitura (12/11/2026)
-- [x] **E2** — Editor de M (12/11/2026; filtro revisado em 13/11: editar filtro existente, lista de valores própria, condição sem valor bloqueia): barra `fx` editável (Enter aplica, Esc cancela) e Editor avançado (`let … in`, Ctrl+Enter aplica). `lerM`/`lerLinhaEtapa` no motor fazem o caminho de volta do `gerarM`; cada etapa precisa usar a etapa logo acima; funções fora do catálogo dão mensagem com a lista aceita. Filtro com várias condições (+/×) e E/OU antes de cada uma.
+- [x] **E2** — Editor de M (12/11/2026; filtro revisado em 13/11: editar filtro existente, lista de valores própria, condição sem valor bloqueia; um conector por nível + grupos (parênteses) + "Lendo como" em português): barra `fx` editável (Enter aplica, Esc cancela) e Editor avançado (`let … in`, Ctrl+Enter aplica). `lerM`/`lerLinhaEtapa` no motor fazem o caminho de volta do `gerarM`; cada etapa precisa usar a etapa logo acima; funções fora do catálogo dão mensagem com a lista aceita. Filtro com várias condições (+/×) e E/OU antes de cada uma.
 - [ ] Editar etapa pela janela da ferramenta (engrenagem), com o formulário já preenchido
 - [ ] **E3** — Mesclar consultas (`Table.NestedJoin`), Acrescentar (`Table.Combine`), Agrupar (`Table.Group`)
 - [ ] **E4** — Modelo e relacionamentos (1:N, chave única, % de correspondência; visuais e DAX filtram pelas ligações)
