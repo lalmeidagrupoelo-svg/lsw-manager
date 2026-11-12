@@ -27,6 +27,7 @@
     hora:     { m: 'type time',     rotulo: 'Hora',              icone: 'HORA' },
     logico:   { m: 'type logical',  rotulo: 'Verdadeiro/Falso',  icone: 'V/F' },
     qualquer: { m: 'type any',      rotulo: 'Qualquer',          icone: 'ABC 123' },
+    tabela:   { m: 'type table',    rotulo: 'Tabela',            icone: 'TAB' },
   };
   const TIPO_DO_M = Object.fromEntries(Object.entries(TIPOS).map(([k, t]) => [t.m, k]));
 
@@ -101,6 +102,7 @@
   function formatar(v, tipo) {
     if (v === null || v === undefined) return 'null';
     if (ehErro(v)) return 'Error';
+    if (v && v.aninhada) return 'Table';
     if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
     if (typeof v === 'number') return v.toLocaleString('pt-BR', { maximumFractionDigits: 6, useGrouping: false }); // 900102, como no Power Query
     if (tipo === 'data' && /^\d{4}-\d{2}-\d{2}$/.test(v)) return v.split('-').reverse().join('/');
@@ -348,6 +350,36 @@
   const objetoLinha = (tab, linha) => { const o = {}; tab.colunas.forEach((c, i) => { o[c.nome] = linha[i]; }); return o; };
   const semEach = e => String(e).trim().replace(/^each\s+/, '');
 
+  // Tipos de junção do Mesclar (os mesmos do Power Query)
+  const JUNCOES = {
+    LeftOuter:  { rotulo: 'Externa esquerda', ajuda: 'Todas as linhas desta consulta e, da outra, só as que combinam.' },
+    Inner:      { rotulo: 'Interna', ajuda: 'Só as linhas que combinam nas duas consultas.' },
+    FullOuter:  { rotulo: 'Externa total', ajuda: 'Todas as linhas das duas consultas, combinando quando dá.' },
+    RightOuter: { rotulo: 'Externa direita', ajuda: 'Todas as linhas da outra consulta e, desta, só as que combinam.' },
+    LeftAnti:   { rotulo: 'Anti esquerda', ajuda: 'Só as linhas desta consulta que NÃO acharam par na outra (bom para achar quem falta).' },
+    RightAnti:  { rotulo: 'Anti direita', ajuda: 'Só as linhas da outra consulta que NÃO acharam par nesta.' },
+  };
+  // Operações do Agrupar: como se escreve em M e o tipo do resultado
+  const AGREGACOES = {
+    soma:      { rotulo: 'Soma',                     m: c => `List.Sum([${c}])`,                  tipo: () => 'decimal', excel: 'SOMA' },
+    media:     { rotulo: 'Média',                    m: c => `List.Average([${c}])`,              tipo: () => 'decimal', excel: 'MÉDIA' },
+    mediana:   { rotulo: 'Mediana',                  m: c => `List.Median([${c}])`,               tipo: () => 'decimal', excel: 'MED' },
+    minimo:    { rotulo: 'Mínimo',                   m: c => `List.Min([${c}])`,                  tipo: t => t || 'qualquer', excel: 'MÍNIMO' },
+    maximo:    { rotulo: 'Máximo',                   m: c => `List.Max([${c}])`,                  tipo: t => t || 'qualquer', excel: 'MÁXIMO' },
+    contar:    { rotulo: 'Contar linhas',            m: () => 'Table.RowCount(_)',                tipo: () => 'inteiro', excel: 'CONT.VALORES', semColuna: true },
+    distintos: { rotulo: 'Contar valores distintos', m: c => `List.Count(List.Distinct([${c}]))`, tipo: () => 'inteiro', excel: 'CONT.ÚNICO (Excel 365)' },
+  };
+  // Resultado de outra consulta, para Mesclar e Acrescentar. Avisa se ela não existe, tem erro ou é circular.
+  function tabelaDeOutraConsulta(nome, ctx) {
+    const outra = (ctx.todas || []).find(q => q.nome === nome);
+    if (!outra) throw new FalhaEtapa(`Expression.Error: a consulta "${nome}" não existe (foi excluída ou renomeada?).`);
+    if (ctx.pilha.includes(nome)) throw new FalhaEtapa(`Expression.Error: referência circular: ${[...ctx.pilha, nome].join(' → ')}. Uma consulta não pode depender dela mesma.`);
+    const r = executar(outra, undefined, ctx.todas, ctx.pilha);
+    if (r.erro && /referência circular/.test(r.erro.mensagem)) throw new FalhaEtapa(r.erro.mensagem); // mostra o ciclo inteiro, não só o vizinho
+    if (r.erro) throw new FalhaEtapa(`Expression.Error: a consulta "${nome}" está com erro na etapa "${r.erro.etapa}". Corrija-a primeiro.`);
+    return r.tabela;
+  }
+
   // Em M puro: separa o texto nos espaços, joga fora os pedaços vazios e junta de novo com um espaço só
   const M_LIMPAR = 'each Text.Combine(List.Select(Text.Split(_, " "), each _ <> ""), " ")';
   const ETAPAS = {
@@ -393,6 +425,87 @@
         idx.forEach(i => { colunas[i].tipo = 'texto'; });
         const linhas = tab.linhas.map(l => { const n = l.slice(); idx.forEach(i => { if (typeof n[i] === 'string') n[i] = n[i].replace(/\s+/g, ' ').trim(); }); return n; });
         return { colunas, linhas };
+      },
+    },
+    mesclar: {
+      nome: 'Consultas Mescladas', descricao: 'Junta com outra consulta pelas colunas-chave (vira uma coluna de tabelas)',
+      m: (e, ant) => `Table.NestedJoin(${ant}, ${listaM(e.chaves.map(aspas))}, ${idM(e.consulta)}, ${listaM(e.chavesOutra.map(aspas))}, ${aspas(e.coluna)}, JoinKind.${e.juncao})`,
+      executar: (tab, e, ctx) => {
+        const dir = tabelaDeOutraConsulta(e.consulta, ctx);
+        if (e.chaves.length !== e.chavesOutra.length || !e.chaves.length) throw new FalhaEtapa('Expression.Error: as duas consultas precisam ter o mesmo número de colunas-chave.');
+        if (tab.colunas.some(c => c.nome === e.coluna)) throw new FalhaEtapa(`Expression.Error: já existe uma coluna chamada "${e.coluna}".`);
+        const ie = e.chaves.map(k => exigeColuna(tab, k));
+        const id = e.chavesOutra.map(k => { const i = dir.colunas.findIndex(c => c.nome === k); if (i < 0) throw new FalhaEtapa(`Expression.Error: a coluna "${k}" não existe na consulta "${e.consulta}".`); return i; });
+        const chave = (l, idx) => { const vs = idx.map(i => l[i]); return vs.some(v => v === null || ehErro(v)) ? null : JSON.stringify(vs); };
+        const mapa = new Map();
+        dir.linhas.forEach((l, j) => { const k = chave(l, id); if (k === null) return; if (!mapa.has(k)) mapa.set(k, []); mapa.get(k).push(j); });
+        const sub = js => ({ aninhada: { colunas: dir.colunas, linhas: js.map(j => dir.linhas[j]) } });
+        const usadas = new Set(); const linhas = []; const tipo = e.juncao;
+        tab.linhas.forEach(l => {
+          const k = chave(l, ie); const js = k === null ? [] : (mapa.get(k) || []);
+          js.forEach(j => usadas.add(j));
+          if ((tipo === 'Inner' || tipo === 'RightOuter') && !js.length) return;
+          if (tipo === 'LeftAnti' && js.length) return;
+          if (tipo === 'RightAnti') return;
+          linhas.push([...l, sub(tipo === 'LeftAnti' ? [] : js)]);
+        });
+        if (['FullOuter', 'RightOuter', 'RightAnti'].includes(tipo)) dir.linhas.forEach((l, j) => { if (!usadas.has(j)) linhas.push([...tab.colunas.map(() => null), sub([j])]); });
+        return { colunas: [...tab.colunas, { nome: e.coluna, tipo: 'tabela', origem: dir.colunas }], linhas };
+      },
+    },
+    expandir: {
+      nome: 'Expandido', descricao: 'Abre a coluna de tabelas e traz as colunas escolhidas',
+      m: (e, ant) => `Table.ExpandTableColumn(${ant}, ${aspas(e.coluna)}, ${listaM(e.colunas.map(aspas))}, ${listaM(e.novos.map(aspas))})`,
+      executar: (tab, e) => {
+        const i = exigeColuna(tab, e.coluna);
+        const origem = tab.colunas[i].origem || ((tab.linhas.find(l => l[i] && l[i].aninhada) || [])[i] || { aninhada: { colunas: [] } }).aninhada.colunas;
+        const idx = e.colunas.map(c => { const k = origem.findIndex(x => x.nome === c); if (k < 0) throw new FalhaEtapa(`Expression.Error: a coluna "${c}" não existe dentro de "${e.coluna}".`); return k; });
+        const novos = e.colunas.map((_, k) => ({ nome: e.novos[k] || e.colunas[k], tipo: origem[idx[k]].tipo }));
+        const colunas = [...tab.colunas.slice(0, i), ...novos, ...tab.colunas.slice(i + 1)];
+        const nomes = colunas.map(c => c.nome); const rep = nomes.find((n, k) => nomes.indexOf(n) !== k);
+        if (rep) throw new FalhaEtapa(`Expression.Error: a coluna "${rep}" ficaria repetida. Use outro nome (ou o prefixo da consulta).`);
+        const linhas = [];
+        tab.linhas.forEach(l => {
+          const n = l[i]; const filhas = n && n.aninhada && n.aninhada.linhas.length ? n.aninhada.linhas : [null];
+          filhas.forEach(f => linhas.push([...l.slice(0, i), ...idx.map(k => (f ? f[k] : null)), ...l.slice(i + 1)]));
+        });
+        return { colunas, linhas };
+      },
+    },
+    acrescentar: {
+      nome: 'Consulta Acrescentada', descricao: 'Põe as linhas de outras consultas embaixo desta',
+      m: (e, ant) => `Table.Combine({${[ant, ...e.consultas.map(idM)].join(', ')}})`,
+      executar: (tab, e, ctx) => {
+        const tabelas = [tab, ...e.consultas.map(n => tabelaDeOutraConsulta(n, ctx))];
+        const colunas = [];
+        tabelas.forEach(t => t.colunas.forEach(c => { const x = colunas.find(y => y.nome === c.nome); if (!x) colunas.push({ ...c, n: 1 }); else { x.n++; if (x.tipo !== c.tipo) x.tipo = 'qualquer'; } }));
+        const linhas = [];
+        tabelas.forEach(t => { const idx = colunas.map(c => t.colunas.findIndex(x => x.nome === c.nome)); t.linhas.forEach(l => linhas.push(idx.map(k => (k < 0 ? null : l[k])))); });
+        return { colunas: colunas.map(({ nome, tipo }) => ({ nome, tipo })), linhas };
+      },
+    },
+    agrupar: {
+      nome: 'Linhas Agrupadas', descricao: 'Resume as linhas por grupo (soma, média, contagem...)',
+      m: (e, ant) => `Table.Group(${ant}, ${listaM(e.chaves.map(aspas))}, ${listaM(e.agregacoes.map(a => `{${aspas(a.nome)}, each ${AGREGACOES[a.op].m(a.coluna)}, ${TIPOS[a.tipo].m}}`))})`,
+      executar: (tab, e) => {
+        const ic = e.chaves.map(k => exigeColuna(tab, k));
+        const ia = e.agregacoes.map(a => (AGREGACOES[a.op].semColuna ? -1 : exigeColuna(tab, a.coluna)));
+        const grupos = new Map();
+        tab.linhas.forEach(l => { const k = JSON.stringify(ic.map(i => (ehErro(l[i]) ? '§erro' : l[i]))); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(l); });
+        const calc = (op, vals) => {
+          if (op === 'contar') return vals.length;
+          const erro = vals.find(ehErro); if (erro) return erro;
+          const v = vals.filter(x => x !== null && x !== '');
+          if (op === 'distintos') return new Set(v.map(x => JSON.stringify(x))).size;
+          if (!v.length) return null;
+          if (op === 'minimo' || op === 'maximo') return v.reduce((a, b) => ((op === 'minimo' ? b < a : b > a) ? b : a));
+          if (v.some(x => typeof x !== 'number')) return new ErroM(`Expression.Error: ${AGREGACOES[op].rotulo} só funciona com números, e a coluna tem texto.`);
+          if (op === 'soma') return v.reduce((a, b) => a + b, 0);
+          if (op === 'media') return v.reduce((a, b) => a + b, 0) / v.length;
+          if (op === 'mediana') { const o = v.slice().sort((a, b) => a - b); const m = Math.floor(o.length / 2); return o.length % 2 ? o[m] : (o[m - 1] + o[m]) / 2; }
+        };
+        const linhas = [...grupos.values()].map(ls => [...ic.map(i => ls[0][i]), ...e.agregacoes.map((a, k) => calc(a.op, ia[k] < 0 ? ls : ls.map(l => l[ia[k]])))]);
+        return { colunas: [...ic.map(i => tab.colunas[i]), ...e.agregacoes.map(a => ({ nome: a.nome, tipo: a.tipo }))], linhas };
       },
     },
     escolher: {
@@ -476,9 +589,10 @@
   }
 
   // Executa as etapas até a de índice "ate". Devolve a tabela ou o erro da primeira etapa que falhou.
-  function executar(consulta, ate = consulta.etapas.length - 1) {
+  // "todas" = todas as consultas (para Mesclar e Acrescentar); "pilha" = quem está chamando (para achar referência circular)
+  function executar(consulta, ate = consulta.etapas.length - 1, todas = [], pilha = []) {
     let tab = { colunas: [], linhas: [] };
-    const ctx = { textoFonte: consulta.fonte ? consulta.fonte.texto : '' };
+    const ctx = { textoFonte: consulta.fonte ? consulta.fonte.texto : '', todas, pilha: [...pilha, consulta.nome] };
     for (let i = 0; i <= ate && i < consulta.etapas.length; i++) {
       const e = consulta.etapas[i];
       try { tab = ETAPAS[e.tipo].executar(tab, e, ctx); }
@@ -516,7 +630,8 @@
 
   // Insere uma etapa depois da posição "depoisDe" (ou no fim), já com nome único
   function inserirEtapa(consulta, etapa, depoisDe = consulta.etapas.length - 1) {
-    const nova = { id: 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), ...etapa, nome: nomeUnico(consulta.etapas, ETAPAS[etapa.tipo].nome) };
+    const nova = { id: 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), ...etapa, nome: nomeUnico(consulta.etapas, etapa.nomeBase || ETAPAS[etapa.tipo].nome) };
+    delete nova.nomeBase;
     consulta.etapas.splice(depoisDe + 1, 0, nova);
     return depoisDe + 1;
   }
@@ -699,7 +814,7 @@
     analisar(expr); // confere a escrita da expressão
     return expr;
   }
-  const FUNCOES_ETAPA = 'Csv.Document, Table.PromoteHeaders, Table.TransformColumnTypes, Table.TransformColumns (limpeza de espaços), Table.SelectColumns, Table.RemoveColumns, Table.SelectRows, Table.RenameColumns e Table.AddColumn';
+  const FUNCOES_ETAPA = 'Csv.Document, Table.PromoteHeaders, Table.TransformColumnTypes, Table.TransformColumns (limpeza de espaços), Table.NestedJoin, Table.ExpandTableColumn, Table.Combine, Table.Group, Table.SelectColumns, Table.RemoveColumns, Table.SelectRows, Table.RenameColumns e Table.AddColumn';
 
   // Lê a expressão de UMA etapa. "anterior" é o nome da etapa de cima (null para a primeira).
   function lerExpressaoEtapa(expr, anterior, consulta) {
@@ -733,6 +848,45 @@
         const lista = itens.map(it => { const par = lerLista(it, 'cada par {"Coluna", tipo}'); if (par.length !== 2) throw new FalhaEtapa('cada item precisa ser {"Coluna", tipo}.'); return [lerTexto(par[0], 'o nome da coluna'), lerTipo(par[1])]; });
         if (!lista.length) throw new FalhaEtapa('a lista de colunas e tipos está vazia.');
         return { tipo: 'tipos', lista };
+      }
+      case 'Table.NestedJoin': {
+        qtd(6, 7); exigeAnterior();
+        const outra = lerNome(args[2]);
+        if (!outra || outra.resto.trim()) throw new FalhaEtapa('o terceiro valor de Table.NestedJoin é o nome da outra consulta (ex.: quadro ou #"minha consulta").');
+        const jm = /^JoinKind\.(\w+)$/.exec(args[5].trim());
+        if (!jm || !JUNCOES[jm[1]]) throw new FalhaEtapa(`o tipo de junção precisa ser um destes: ${Object.keys(JUNCOES).map(k => 'JoinKind.' + k).join(', ')}.`);
+        return { tipo: 'mesclar', chaves: lerLista(args[1], 'as chaves').map(c => lerTexto(c, 'a chave')), consulta: outra.nome, chavesOutra: lerLista(args[3], 'as chaves da outra consulta').map(c => lerTexto(c, 'a chave')), coluna: lerTexto(args[4], 'o nome da nova coluna'), juncao: jm[1] };
+      }
+      case 'Table.ExpandTableColumn': {
+        qtd(3, 4); exigeAnterior();
+        const colunas = lerLista(args[2], 'as colunas a expandir').map(c => lerTexto(c, 'o nome da coluna'));
+        const novos = args[3] ? lerLista(args[3], 'os novos nomes').map(c => lerTexto(c, 'o novo nome')) : colunas.slice();
+        if (novos.length !== colunas.length) throw new FalhaEtapa('a lista de novos nomes precisa ter o mesmo tamanho da lista de colunas.');
+        return { tipo: 'expandir', coluna: lerTexto(args[1], 'a coluna de tabelas'), colunas, novos };
+      }
+      case 'Table.Combine': {
+        qtd(1, 2);
+        if (anterior === null) throw new FalhaEtapa('Table.Combine não pode ser a primeira etapa.');
+        const itens = lerLista(args[0], 'as consultas').map(it => { const r = lerNome(it); if (!r || r.resto.trim()) throw new FalhaEtapa(`"${it}" não é um nome de consulta.`); return r.nome; });
+        if (itens[0] !== anterior) throw new FalhaEtapa(`nesta versão, a lista do Table.Combine começa pela etapa logo acima: {${idM(anterior)}, ...}.`);
+        if (itens.length < 2) throw new FalhaEtapa('Table.Combine precisa de pelo menos uma outra consulta na lista.');
+        return { tipo: 'acrescentar', consultas: itens.slice(1) };
+      }
+      case 'Table.Group': {
+        qtd(3, 4); exigeAnterior();
+        const normal = x => x.replace(/\s+/g, ' ').trim();
+        const agregacoes = lerLista(args[2], 'as novas colunas').map(it => {
+          const par = lerLista(it, 'cada item {"Nome", each função, tipo}');
+          if (par.length < 2) throw new FalhaEtapa('cada item precisa ser {"Nome", each função, tipo}.');
+          const f = normal(par[1]);
+          for (const [op, a] of Object.entries(AGREGACOES)) {
+            const modelo = ('each ' + a.m('\u0000')).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace('\u0000', '(.+?)');
+            const mm = new RegExp('^' + modelo + '$').exec(f);
+            if (mm) return { nome: lerTexto(par[0], 'o nome da nova coluna'), op, coluna: a.semColuna ? null : mm[1], tipo: par[2] ? lerTipo(par[2]) : a.tipo() };
+          }
+          throw new FalhaEtapa(`a conta "${par[1]}" não é uma das aceitas no Agrupar: ${Object.values(AGREGACOES).map(a => a.m('COL')).join(', ')}.`);
+        });
+        return { tipo: 'agrupar', chaves: lerLista(args[1], 'as colunas de grupo').map(c => lerTexto(c, 'a coluna de grupo')), agregacoes };
       }
       case 'Table.TransformColumns': {
         qtd(2, 3); exigeAnterior();
@@ -810,7 +964,7 @@
   }
 
   const api = {
-    TIPOS, TIPO_DO_M, FUNCOES_M, ETAPAS, OPERADORES, ErroM, FalhaEtapa,
+    TIPOS, TIPO_DO_M, FUNCOES_M, ETAPAS, OPERADORES, JUNCOES, AGREGACOES, ErroM, FalhaEtapa,
     lerM, lerLinhaEtapa, dividirTopo, montarFiltro, lerFiltro, lerFiltroEmPortugues,
     ehErro, converter, formatar, detectarTipo, lerCsv, lerNumero, lerData,
     analisar, avaliar, colunasUsadas, gerarM, gerarMEtapa, executar, qualidade,

@@ -42,11 +42,11 @@ button { cursor: pointer; }
 
 /* faixa de ferramentas (o "ribbon") */
 .faixa { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface); overflow-x: auto; }
-.faixa-grupo { display: grid; grid-template-rows: auto auto; gap: 4px; padding: 0 10px; border-right: 1px solid var(--border); }
+.faixa-grupo { display: grid; grid-template-rows: auto auto; gap: 4px; padding: 0 6px; border-right: 1px solid var(--border); }
 .faixa-grupo:last-child { border-right: 0; }
 .faixa-grupo > div { display: flex; gap: 4px; }
 .faixa-grupo > span { font-size: var(--fs-10); color: var(--muted); text-align: center; white-space: nowrap; }
-.ferr { display: grid; justify-items: center; gap: 2px; min-width: 64px; padding: 5px 8px; border: 1px solid transparent; border-radius: 6px; background: none; font-size: var(--fs-11); color: var(--text); white-space: nowrap; }
+.ferr { display: grid; justify-items: center; gap: 2px; min-width: 52px; padding: 5px 6px; border: 1px solid transparent; border-radius: 6px; background: none; font-size: var(--fs-11); color: var(--text); white-space: nowrap; }
 .ferr b { font: 700 var(--fs-12) var(--f-mono); color: var(--text-2); }
 .ferr:hover:not(:disabled) { background: var(--surface-3); }
 .ferr.on { background: var(--accent-soft); border-color: var(--accent); }
@@ -221,6 +221,16 @@ select.cond-junta { color: var(--link); padding: 7px 4px; }
 .cond-sugestoes li.vazio { color: var(--muted); cursor: default; background: none; }
 .cond-x { width: 30px; height: 30px; border-radius: 6px; border: 1px solid var(--border); background: none; color: var(--muted); font-size: var(--fs-16); line-height: 1; }
 .cond-x:hover { color: var(--bad); border-color: var(--bad); background: var(--bad-bg); }
+
+/* mesclar e agrupar */
+.par-chave { display: grid; grid-template-columns: minmax(0, 1fr) 20px minmax(0, 1fr) 30px; gap: 8px; align-items: center; }
+.par-chave span { text-align: center; color: var(--muted); font-weight: 700; }
+#g-chaves .par-chave { grid-template-columns: minmax(0, 1fr) 30px; }
+.par-chave select, .ag-linha select, .ag-linha input { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px; font-size: var(--fs-13); width: 100%; min-width: 0; }
+.ag-linha { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1.2fr) 30px; gap: 8px; align-items: center; }
+.ag-linha select:disabled { opacity: .45; }
+.grade td.aninhada { color: var(--link); font-style: italic; font-weight: 600; }
+.grade td.aninhada small { font: 500 var(--fs-10) var(--f-mono); color: var(--muted); font-style: normal; }
 
 /* coluna personalizada: 3 partes */
 .personalizada { display: grid; grid-template-columns: 180px minmax(0, 1fr) 240px; gap: 14px; min-height: 0; align-items: start; }

@@ -41,6 +41,13 @@ Ferramenta para **montar bases e relatórios** no estilo Power BI, dentro do nav
 | `filtrar` | Linhas Filtradas | `Table.SelectRows(..., each <expr>)` |
 | `renomear` | Colunas Renomeadas | `Table.RenameColumns(..., {{"A", "B"}})` |
 | `adicionar` | Personalização Adicionada | `Table.AddColumn(..., "COL", each <expr>, type number)` |
+| `mesclar` | Consultas Mescladas | `Table.NestedJoin(..., {"K"}, outra, {"K"}, "outra", JoinKind.LeftOuter)` (coluna de tabelas, tipo `tabela`) |
+| `expandir` | `<coluna> Expandido` | `Table.ExpandTableColumn(..., "outra", {"A"}, {"outra.A"})` |
+| `acrescentar` | Consulta Acrescentada | `Table.Combine({..., outra})` |
+| `agrupar` | Linhas Agrupadas | `Table.Group(..., {"K"}, {{"Soma", each List.Sum([C]), type number}, {"Contagem", each Table.RowCount(_), Int64.Type}})` |
+
+- Consultas que usam outras: `executar(consulta, ate, todas)` recebe todas as consultas; referência circular e consulta inexistente viram mensagem. Renomear uma consulta atualiza quem a usa; excluir avisa quem depende dela. A janela de Mesclar/Acrescentar só oferece consultas que não criam ciclo.
+- Junções (`JUNCOES`): LeftOuter, Inner, FullOuter, RightOuter, LeftAnti, RightAnti. Agregações (`AGREGACOES`): soma, média, mediana, mínimo, máximo, contar linhas, contar distintos.
 
 - Nomes repetidos ganham número no fim, como no Power Query (`Tipo Alterado1`).
 - Uma ferramenta usada com uma etapa do meio selecionada entra **logo depois** dela.
@@ -55,7 +62,7 @@ Ferramenta para **montar bases e relatórios** no estilo Power BI, dentro do nav
 - [x] **E1** — Transformar dados: 6 ferramentas, etapas aplicadas, prévia por etapa, qualidade da coluna, código M só leitura (12/11/2026)
 - [x] **E2** — Editor de M (12/11/2026; filtro revisado em 13/11: editar filtro existente, lista de valores própria, condição sem valor bloqueia; um conector por nível + grupos (parênteses) + "Lendo como" em português): barra `fx` editável (Enter aplica, Esc cancela) e Editor avançado (`let … in`, Ctrl+Enter aplica). `lerM`/`lerLinhaEtapa` no motor fazem o caminho de volta do `gerarM`; cada etapa precisa usar a etapa logo acima; funções fora do catálogo dão mensagem com a lista aceita. Filtro com várias condições (+/×) e E/OU antes de cada uma.
 - [ ] Editar etapa pela janela da ferramenta (engrenagem), com o formulário já preenchido
-- [ ] **E3** — Mesclar consultas (`Table.NestedJoin`), Acrescentar (`Table.Combine`), Agrupar (`Table.Group`)
+- [x] **E3** — Mesclar (6 junções, várias chaves, prévia de % de correspondência), Acrescentar e Agrupar (13/11/2026). Importação já cria a etapa Espaços Removidos.
 - [ ] **E4** — Modelo e relacionamentos (1:N, chave única, % de correspondência; visuais e DAX filtram pelas ligações)
 - [ ] **E5** — Central de funções M e DAX
 - [ ] **E6** — Leitor de fórmulas
@@ -63,5 +70,5 @@ Ferramenta para **montar bases e relatórios** no estilo Power BI, dentro do nav
 
 ## Como testar localmente
 
-1. `node apps/estudio/testes/motor.test.js` — deve terminar com "12 testes passaram."
+1. `node apps/estudio/testes/motor.test.js` — deve terminar com "15 testes passaram."
 2. Abrir `apps/estudio/index.html` com o Live Server (ou `python3 -m http.server` dentro de `apps/estudio`).

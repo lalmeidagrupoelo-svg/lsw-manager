@@ -136,7 +136,7 @@ in
 teste('E2: erros de M explicam o que corrigir', () => {
   const c = M.consultaDeCsv('a', 'atendimentos.csv', csv);
   const base = 'let\n Fonte = Csv.Document(File.Contents("atendimentos.csv"), [Delimiter=";"]),\n P = Table.PromoteHeaders(Fonte)';
-  assert.throws(() => M.lerM(base + ',\n F = Table.Group(P, {"A"}, {})\nin\n F', c), /Table.Group ainda não está no Estúdio/);
+  assert.throws(() => M.lerM(base + ',\n F = Table.Pivot(P, {"A"}, "A", "B")\nin\n F', c), /Table.Pivot ainda não está no Estúdio/);
   assert.throws(() => M.lerM(base + ',\n F = Table.SelectRows(Fonte, each [A] = 1)\nin\n F', c), /etapa logo acima.*deveria ser P/);
   assert.throws(() => M.lerM(base + '\nin\n Fonte', c), /depois do "in" vai o nome da última etapa: P/);
   assert.throws(() => M.lerM(base + ',\n F = Table.SelectRows(P, [A] = 1)\nin\n F', c), /começar com "each"/);
@@ -170,6 +170,65 @@ teste('filtro: um conector por nível e grupos viram parênteses (ida e volta)',
   const nv = { junta: 'or', itens: [{ coluna: 'CANAL', operador: 'naoVazio', valor: '' }, { coluna: 'OPERAÇÃO', operador: 'igual', valor: 'SAC' }] };
   assert.deepStrictEqual(M.lerFiltro(M.montarFiltro(nv, tipos)), nv);
   assert.strictEqual(M.lerFiltro('[A] = 1 and ([B] = 2 or ([C] = 3 and [D] = 4))'), null, 'grupo dentro de grupo fica no Avançado');
+});
+
+teste('E3: mesclar com quadro pela matrícula e expandir nome e supervisor', () => {
+  const quadro = M.consultaDeCsv('quadro', 'quadro.csv', fs.readFileSync(path.join(__dirname, '../dados-demo/quadro.csv'), 'utf8'));
+  const c = M.consultaDeCsv('atendimentos', 'atendimentos.csv', csv);
+  const todas = [c, quadro];
+  M.inserirEtapa(c, { tipo: 'mesclar', chaves: ['MATRICULA'], consulta: 'quadro', chavesOutra: ['MATRICULA'], coluna: 'quadro', juncao: 'LeftOuter' });
+  M.inserirEtapa(c, { tipo: 'expandir', nomeBase: 'quadro Expandido', coluna: 'quadro', colunas: ['NOME', 'SUPERVISOR'], novos: ['quadro.NOME', 'quadro.SUPERVISOR'] });
+  assert.strictEqual(c.etapas[c.etapas.length - 1].nome, 'quadro Expandido');
+  const { tabela, erro } = M.executar(c, undefined, todas);
+  assert.strictEqual(erro, null);
+  assert.strictEqual(tabela.linhas.length, 348, 'cada atendimento acha uma pessoa: nenhuma linha some nem repete');
+  const n = tabela.colunas.findIndex(x => x.nome === 'quadro.NOME');
+  assert.ok(tabela.linhas.every(l => typeof l[n] === 'string' && l[n].length > 3));
+  const m = M.gerarM(c);
+  assert.ok(m.includes('Table.NestedJoin(#"Espaços Removidos", {"MATRICULA"}, quadro, {"MATRICULA"}, "quadro", JoinKind.LeftOuter)'));
+  assert.ok(m.includes('#"quadro Expandido" = Table.ExpandTableColumn(#"Consultas Mescladas", "quadro", {"NOME", "SUPERVISOR"}, {"quadro.NOME", "quadro.SUPERVISOR"})'));
+  assert.strictEqual(M.gerarM({ ...c, etapas: M.lerM(m, c) }), m, 'ida e volta do M');
+  // anti esquerda: quem do quadro não tem atendimento (supervisores)
+  const q2 = JSON.parse(JSON.stringify(quadro));
+  M.inserirEtapa(q2, { tipo: 'mesclar', chaves: ['MATRICULA'], consulta: 'atendimentos', chavesOutra: ['MATRICULA'], coluna: 'at', juncao: 'LeftAnti' });
+  const atSimples = M.consultaDeCsv('atendimentos', 'atendimentos.csv', csv); // sem mesclar, senão vira ciclo
+  const anti = M.executar(q2, undefined, [atSimples, q2]).tabela;
+  const cargo = anti.colunas.findIndex(x => x.nome === 'CARGO');
+  assert.ok(anti.linhas.length >= 4 && anti.linhas.every(l => l[cargo] === 'SUPERVISOR'));
+});
+
+teste('E3: agrupar por operação e acrescentar', () => {
+  const c = M.consultaDeCsv('atendimentos', 'atendimentos.csv', csv);
+  M.inserirEtapa(c, { tipo: 'tipos', lista: [['CHAMADAS', 'inteiro']] });
+  M.inserirEtapa(c, { tipo: 'agrupar', chaves: ['OPERAÇÃO'], agregacoes: [
+    { nome: 'TEMPO', op: 'soma', coluna: 'TEMPO_FALADO_S', tipo: 'decimal' },
+    { nome: 'Linhas', op: 'contar', coluna: null, tipo: 'inteiro' },
+    { nome: 'Pessoas', op: 'distintos', coluna: 'MATRICULA', tipo: 'inteiro' },
+  ] });
+  const t = M.executar(c).tabela;
+  assert.deepStrictEqual(t.colunas.map(x => x.nome), ['OPERAÇÃO', 'TEMPO', 'Linhas', 'Pessoas']);
+  assert.strictEqual(t.linhas.length, 4);
+  assert.strictEqual(t.linhas.reduce((s, l) => s + l[2], 0), 348);
+  assert.ok(t.linhas.every(l => l[3] === 15), '15 operadores por operação');
+  const m = M.gerarM(c);
+  assert.ok(m.includes('{"Linhas", each Table.RowCount(_), Int64.Type}') && m.includes('{"Pessoas", each List.Count(List.Distinct([MATRICULA])), Int64.Type}'));
+  assert.strictEqual(M.gerarM({ ...c, etapas: M.lerM(m, c) }), m);
+  // acrescentar a mesma base duas vezes dobra as linhas; colunas que faltam ficam null
+  const a = M.consultaDeCsv('a', 'atendimentos.csv', csv);
+  const q = M.consultaDeCsv('quadro', 'quadro.csv', fs.readFileSync(path.join(__dirname, '../dados-demo/quadro.csv'), 'utf8'));
+  M.inserirEtapa(a, { tipo: 'acrescentar', consultas: ['quadro'] });
+  const r = M.executar(a, undefined, [a, q]).tabela;
+  assert.strictEqual(r.linhas.length, 348 + 64);
+  assert.ok(r.colunas.some(x => x.nome === 'NOME') && r.colunas.some(x => x.nome === 'CHAMADAS'));
+});
+
+teste('E3: consulta que não existe e referência circular', () => {
+  const a = M.consultaDeCsv('a', 'atendimentos.csv', csv);
+  const b = M.consultaDeCsv('b', 'atendimentos.csv', csv);
+  M.inserirEtapa(a, { tipo: 'acrescentar', consultas: ['b'] });
+  M.inserirEtapa(b, { tipo: 'acrescentar', consultas: ['a'] });
+  assert.ok(/referência circular: a → b → a/.test(M.executar(a, undefined, [a, b]).erro.mensagem));
+  assert.ok(/a consulta "b" não existe/.test(M.executar(a, undefined, [a]).erro.mensagem));
 });
 
 console.log(`\n${ok} testes passaram.`);

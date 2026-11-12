@@ -48,7 +48,9 @@ function indiceEtapa() {
   const c = atual(); if (!c) return -1;
   return ui.etapaSel === null || ui.etapaSel >= c.etapas.length ? c.etapas.length - 1 : ui.etapaSel;
 }
-const resultadoAtual = () => { const c = atual(); return c ? M.executar(c, indiceEtapa()) : null; };
+// Executa uma consulta conhecendo as outras (Mesclar e Acrescentar usam outras consultas)
+const exec = (c, ate) => M.executar(c, ate, ui.consultas);
+const resultadoAtual = () => { const c = atual(); return c ? exec(c, indiceEtapa()) : null; };
 
 async function salvar() {
   const r = await Armazenamento.salvar({ versao: 1, consultas: ui.consultas, sel: ui.sel });
@@ -88,7 +90,7 @@ function render() {
 function renderConsultas() {
   $('titulo-consultas').textContent = `Consultas (${ui.consultas.length})`;
   $('lista-consultas').innerHTML = ui.consultas.map(c => {
-    const falha = M.executar(c).erro;
+    const falha = exec(c).erro;
     return `<li class="${c.id === ui.sel ? 'on' : ''}${falha ? ' com-erro' : ''}" data-consulta="${c.id}" title="${falha ? esc('Com erro na etapa ' + falha.etapa) : esc(c.fonte.arquivo)}">
       <span class="ico">${falha ? '⚠' : '▦'}</span><span class="nome">${esc(c.nome)}</span>
       <button class="x" type="button" data-excluir-consulta="${c.id}" aria-label="Excluir consulta ${esc(c.nome)}">×</button></li>`;
@@ -101,7 +103,7 @@ function renderEtapas() {
   $('nome-consulta').disabled = !c;
   if (!c) { $('lista-etapas').innerHTML = ''; return; }
   const sel = indiceEtapa();
-  const falha = M.executar(c).erro;
+  const falha = exec(c).erro;
   $('lista-etapas').innerHTML = c.etapas.map((e, i) => `
     <li class="${i === sel ? 'on' : ''}${i > sel ? ' depois' : ''}${falha && falha.indice === i ? ' com-erro' : ''}" data-etapa="${i}" title="${esc(M.ETAPAS[e.tipo].descricao)}">
       <span class="ico">${falha && falha.indice === i ? '⚠' : i + 1}</span><span class="nome">${esc(e.nome)}</span>
@@ -123,7 +125,7 @@ function renderCentro() {
   }
   const i = indiceEtapa();
   mostrarFormula(M.gerarMEtapa(c, i));
-  const res = M.executar(c, i);
+  const res = exec(c, i);
   if (res.erro) {
     area.innerHTML = `<div class="erro-etapa"><h3>A etapa “${esc(res.erro.etapa)}” não conseguiu rodar</h3>
       <p>Isso costuma acontecer quando uma etapa anterior foi apagada ou mudou o nome de uma coluna que esta etapa usa.</p>
@@ -188,7 +190,7 @@ function aplicarFormula() {
     ui.editandoFormula = false;
     if (JSON.stringify({ ...c.etapas[i], id: 0 }) === antes) return render();
     salvar(); render();
-    const falha = M.executar(c).erro;
+    const falha = exec(c).erro;
     aviso(falha ? `Etapa "${etapa.nome}" alterada, mas a etapa "${falha.etapa}" ficou com erro.` : `Etapa "${etapa.nome}" alterada pelo código M.`, falha ? 'erro' : 'ok');
   } catch (e) {
     $('formula-erro').textContent = e.message.replace(/^Expression\./, '');
@@ -210,7 +212,7 @@ function aplicarCodigo() {
     const etapas = M.lerM($('codigo-edicao').value, c);
     c.etapas = etapas; ui.etapaSel = null; ui.editandoCodigo = false; ui.msgCelula = '';
     salvar(); render();
-    const falha = M.executar(c).erro;
+    const falha = exec(c).erro;
     aviso(falha ? `Código aplicado: ${etapas.length} etapas. A etapa "${falha.etapa}" está com erro; clique nela para ver.` : `Código aplicado: ${etapas.length} etapas refeitas.`, falha ? 'erro' : 'ok', 5000);
   } catch (e) {
     $('codigo-erro').textContent = e.message.replace(/^Expression\./, '');
@@ -233,6 +235,7 @@ function htmlGrade(t) {
   const corpo = t.linhas.slice(0, LIMITE_LINHAS_GRADE).map((l, r) => `<tr><td class="num-linha">${r + 1}</td>${l.map((v, k) => {
     if (M.ehErro(v)) return `<td class="erro" data-erro="${esc(v.mensagem)}">Error</td>`;
     if (v === null) return '<td class="nulo">null</td>';
+    if (v && v.aninhada) return `<td class="aninhada" title="${v.aninhada.linhas.length} linha(s) da outra consulta">Table <small>${v.aninhada.linhas.length}</small></td>`;
     return `<td class="${numerico[k] ? 'num' : ''}">${esc(M.formatar(v, t.colunas[k].tipo))}</td>`;
   }).join('')}</tr>`).join('');
   return `<table class="grade"><thead><tr><th class="num-linha"></th>${cab}</tr></thead><tbody>${corpo}</tbody></table>`;
@@ -250,8 +253,9 @@ function abrirMenuColuna(k, botao) {
     <button type="button" data-acao-col="remover">Remover <small>Table.RemoveColumns</small></button>
     <button type="button" data-acao-col="outras">Remover outras colunas <small>Table.SelectColumns</small></button>
     <hr><div class="titulo-menu">Alterar tipo para</div>
-    ${Object.entries(M.TIPOS).filter(([k2]) => k2 !== 'qualquer').map(([k2, tp]) => `<button type="button" data-acao-col="tipo" data-tipo="${k2}">${tp.rotulo}${col.tipo === k2 ? ' ✓' : ''} <small>${tp.icone}</small></button>`).join('')}
-    <hr><button type="button" data-acao-col="adicionar">Coluna personalizada…</button>`;
+    ${Object.entries(M.TIPOS).filter(([k2]) => k2 !== 'qualquer' && k2 !== 'tabela').map(([k2, tp]) => `<button type="button" data-acao-col="tipo" data-tipo="${k2}">${tp.rotulo}${col.tipo === k2 ? ' ✓' : ''} <small>${tp.icone}</small></button>`).join('')}
+    <hr><button type="button" data-acao-col="agrupar">Agrupar por esta coluna…</button>
+    <button type="button" data-acao-col="adicionar">Coluna personalizada…</button>`;
   document.body.appendChild(menu);
   const r = botao.getBoundingClientRect();
   menu.style.left = Math.min(r.left, window.innerWidth - menu.offsetWidth - 8) + 'px';
@@ -266,6 +270,7 @@ function abrirMenuColuna(k, botao) {
     if (acao === 'outras') adicionarEtapa({ tipo: 'escolher', colunas: [col.nome] });
     if (acao === 'tipo') { if (b.dataset.tipo !== col.tipo) adicionarEtapa({ tipo: 'tipos', lista: [[col.nome, b.dataset.tipo]] }); }
     if (acao === 'adicionar') janelaPersonalizada();
+    if (acao === 'agrupar') janelaAgrupar(col.nome);
   });
 }
 
@@ -328,7 +333,7 @@ function janelaNova() {
 }
 function criarConsulta(arquivo, texto) {
   const c = M.consultaDeCsv(nomeConsultaUnico(arquivo.replace(/\.[^.]+$/, '')), arquivo, texto);
-  const tab = M.executar(c).tabela;
+  const tab = exec(c).tabela;
   if (!tab || !tab.colunas.length) { $('modal-msg').textContent = 'O arquivo está vazio ou não parece um CSV.'; return; }
   ui.consultas.push(c); ui.sel = c.id; ui.etapaSel = null; ui.msgCelula = '';
   fecharJanela(); salvar(); render();
@@ -373,7 +378,7 @@ function janelaColunas(modo, pre) {
 function janelaFiltrar(pre) {
   const c = atual(); const idx = indiceEtapa();
   const editando = c.etapas[idx] && c.etapas[idx].tipo === 'filtrar';
-  const entrada = editando ? M.executar(c, idx - 1) : resultadoAtual();
+  const entrada = editando ? exec(c, idx - 1) : resultadoAtual();
   if (!entrada.tabela) return aviso('A etapa anterior ao filtro está com erro; corrija-a antes de editar o filtro.', 'erro');
   const t = entrada.tabela;
   const exprAtual = editando ? c.etapas[idx].expr : '';
@@ -570,7 +575,7 @@ function janelaFiltrar(pre) {
       if (!editando) return adicionarEtapa({ tipo: 'filtrar', expr: nova });
       c.etapas[idx] = { ...c.etapas[idx], expr: nova };
       ui.msgCelula = ''; salvar(); render();
-      const falha = M.executar(c).erro;
+      const falha = exec(c).erro;
       aviso(falha ? `Filtro "${c.etapas[idx].nome}" salvo, mas a etapa "${falha.etapa}" ficou com erro.` : `Filtro "${c.etapas[idx].nome}" atualizado.`, falha ? 'erro' : 'ok');
     },
   });
@@ -579,7 +584,7 @@ function janelaFiltrar(pre) {
 // Tipo de dados: troca o tipo de várias colunas de uma vez
 function janelaTipos() {
   const t = tabelaEntrada();
-  const opcoes = sel => Object.entries(M.TIPOS).map(([k, tp]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${tp.rotulo}</option>`).join('');
+  const opcoes = sel => Object.entries(M.TIPOS).filter(([k]) => k !== 'tabela' || sel === 'tabela').map(([k, tp]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${tp.rotulo}</option>`).join('');
   abrirJanela({
     titulo: 'Tipo de dados',
     corpo: `<p class="ajuda">Troque o tipo das colunas que precisarem. Valores que não combinam com o tipo viram <b>Error</b> na célula, e a linha continua (no M: Table.TransformColumnTypes).</p>
@@ -626,7 +631,7 @@ function janelaPersonalizada() {
   const t = tabelaEntrada();
   const grupos = {};
   Object.entries(M.FUNCOES_M).forEach(([nome, f]) => { (grupos[f.grupo] = grupos[f.grupo] || []).push(nome); });
-  const opcoesTipo = Object.entries(M.TIPOS).map(([k, tp]) => `<option value="${k}" ${k === 'qualquer' ? 'selected' : ''}>${tp.rotulo}</option>`).join('');
+  const opcoesTipo = Object.entries(M.TIPOS).filter(([k]) => k !== 'tabela').map(([k, tp]) => `<option value="${k}" ${k === 'qualquer' ? 'selected' : ''}>${tp.rotulo}</option>`).join('');
   abrirJanela({
     titulo: 'Coluna personalizada', largo: true, ok: 'Criar coluna',
     corpo: `<div class="linha-form" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr)">
@@ -679,23 +684,203 @@ function janelaPersonalizada() {
   });
 }
 
+// Outras consultas que esta pode usar (sem ela mesma e sem quem já depende dela, para não fazer ciclo)
+function outrasConsultas(c) {
+  const dependem = new Set();
+  const marcar = nome => ui.consultas.forEach(q => { if (!dependem.has(q.nome) && q.etapas.some(e => usaConsulta(e, nome))) { dependem.add(q.nome); marcar(q.nome); } });
+  marcar(c.nome);
+  return ui.consultas.filter(q => q.id !== c.id && !dependem.has(q.nome));
+}
+
+// Mesclar consultas: liga esta consulta a outra pelas colunas-chave (como o PROCV, mas trazendo várias colunas)
+function janelaMesclar() {
+  const c = atual(); const t = tabelaEntrada();
+  const outras = outrasConsultas(c);
+  if (!outras.length) return aviso('Não há outra consulta para mesclar. Crie uma em + Nova consulta (ex.: quadro.csv).', 'erro');
+  const opcoesJ = Object.entries(M.JUNCOES).map(([k, j]) => `<option value="${k}">${j.rotulo}</option>`).join('');
+  abrirJanela({
+    titulo: 'Mesclar consultas', largo: true, ok: 'Mesclar',
+    corpo: `<p class="ajuda">Junta cada linha desta consulta com as linhas da outra que têm o <b>mesmo valor nas colunas-chave</b>, como um PROCV que traz várias colunas de uma vez (no M: Table.NestedJoin + Table.ExpandTableColumn).</p>
+      <div class="linha-form" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+        <div class="campo"><span class="rotulo">Esta consulta</span><div class="resultado"><b>${esc(c.nome)}</b> · ${t.linhas.length.toLocaleString('pt-BR')} linhas</div></div>
+        <div class="campo"><label for="m-outra">Mesclar com</label><select id="m-outra">${outras.map(q => `<option value="${esc(q.nome)}">${esc(q.nome)}</option>`).join('')}</select></div>
+      </div>
+      <div class="campo"><span class="rotulo">Colunas-chave (o valor precisa ser igual dos dois lados)</span><div id="m-pares" class="conds"></div>
+        <div><button class="btn peq" type="button" id="m-mais-chave">+ Outra chave</button></div></div>
+      <div class="linha-form" style="grid-template-columns:minmax(0,1fr) minmax(0,2fr)">
+        <div class="campo"><label for="m-juncao">Tipo de junção</label><select id="m-juncao">${opcoesJ}</select></div>
+        <p class="ajuda" id="m-juncao-ajuda" style="align-self:end"></p>
+      </div>
+      <div class="campo"><span class="rotulo">Colunas que vêm da outra consulta</span><div class="checks" id="m-cols" style="max-height:180px"></div>
+        <label class="ajuda" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="m-prefixo" checked> Usar o nome da consulta como prefixo (ex.: quadro.NOME), para não confundir com colunas desta</label></div>
+      <div class="resultado" id="m-res">—</div>`,
+    aoAbrir() {
+      const outraTab = () => { const q = ui.consultas.find(x => x.nome === $('m-outra').value); const r = exec(q); return r.tabela; };
+      const parHtml = (esq, dir, tabDir) => `<div class="par-chave"><select data-lado="esq" aria-label="Coluna desta consulta">${opcoesColunas(t, esq)}</select><span>=</span><select data-lado="dir" aria-label="Coluna da outra consulta">${tabDir ? opcoesColunas(tabDir, dir) : ''}</select><button class="cond-x" type="button" data-remover-par aria-label="Remover esta chave">×</button></div>`;
+      const montarTela = () => {
+        const td = outraTab();
+        if (!td) { $('m-res').className = 'resultado ruim'; $('m-res').textContent = `A consulta "${$('m-outra').value}" está com erro. Corrija-a antes de mesclar.`; $('m-pares').innerHTML = ''; $('m-cols').innerHTML = ''; return; }
+        const comum = t.colunas.map(x => x.nome).filter(n => td.colunas.some(y => y.nome === n));
+        const chave = comum.find(n => /MATRICULA|CODIGO|CÓDIGO|ID/i.test(n)) || comum[0] || t.colunas[0].nome;
+        $('m-pares').innerHTML = parHtml(chave, td.colunas.some(y => y.nome === chave) ? chave : td.colunas[0].nome, td);
+        $('m-cols').innerHTML = td.colunas.map(x => `<label><input type="checkbox" value="${esc(x.nome)}" ${x.nome === chave ? '' : 'checked'}> ${esc(x.nome)} <small>${M.TIPOS[x.tipo].icone}</small></label>`).join('');
+        atualizar();
+      };
+      const pares = () => [...$('m-pares').querySelectorAll('.par-chave')].map(el => [el.querySelector('[data-lado=esq]').value, el.querySelector('[data-lado=dir]').value]);
+      const etapas = () => {
+        const nomeOutra = $('m-outra').value; const ps = pares();
+        const usadas = new Set(t.colunas.map(x => x.nome));
+        let coluna = nomeOutra; let n = 2; while (usadas.has(coluna)) coluna = `${nomeOutra} (${n++})`;
+        const cols = [...$('m-cols').querySelectorAll('input:checked')].map(x => x.value);
+        const novos = cols.map(x => ($('m-prefixo').checked ? `${nomeOutra}.${x}` : x));
+        const lista = [{ tipo: 'mesclar', chaves: ps.map(p => p[0]), consulta: nomeOutra, chavesOutra: ps.map(p => p[1]), coluna, juncao: $('m-juncao').value }];
+        if (cols.length) lista.push({ tipo: 'expandir', nomeBase: `${coluna} Expandido`, coluna, colunas: cols, novos });
+        return lista;
+      };
+      const atualizar = () => {
+        $('m-juncao-ajuda').textContent = M.JUNCOES[$('m-juncao').value].ajuda;
+        $('modal-corpo').querySelectorAll('[data-remover-par]').forEach(b => { b.hidden = pares().length === 1; });
+        try {
+          const lista = etapas();
+          // prévia: roda a consulta com a etapa de mesclar no lugar
+          const copia = JSON.parse(JSON.stringify(c)); copia.etapas = copia.etapas.slice(0, indiceEtapa() + 1);
+          M.inserirEtapa(copia, lista[0]);
+          const r = M.executar(copia, undefined, ui.consultas.map(q => (q.id === c.id ? copia : q)));
+          if (r.erro) throw new M.FalhaEtapa(r.erro.mensagem);
+          const tb = r.tabela; const k = tb.colunas.length - 1;
+          const qtd = l => (l[k] && l[k].aninhada ? l[k].aninhada.linhas.length : 0);
+          const achou = tb.linhas.filter(l => qtd(l) > 0).length, varias = tb.linhas.filter(l => qtd(l) > 1).length;
+          const j = $('m-juncao').value;
+          $('m-res').className = 'resultado ' + (achou || j === 'LeftAnti' ? 'ok' : 'ruim');
+          $('m-res').innerHTML = `${j === 'LeftAnti' || j === 'RightAnti' ? `Ficam <b>${tb.linhas.length.toLocaleString('pt-BR')}</b> linhas sem par.` : `<b>${achou.toLocaleString('pt-BR')}</b> de ${tb.linhas.length.toLocaleString('pt-BR')} linhas acharam par em <b>${esc($('m-outra').value)}</b> (${tb.linhas.length ? Math.round(achou / tb.linhas.length * 100) : 0}%).`}
+            ${varias ? `<br>${varias.toLocaleString('pt-BR')} linha(s) acharam mais de um par: ao expandir, elas vão se repetir uma vez para cada par.` : ''}
+            ${!achou && j !== 'LeftAnti' && j !== 'RightAnti' ? '<br>Nenhuma linha combinou: confira se as colunas-chave têm o mesmo conteúdo e o mesmo tipo (texto com texto, número com número).' : ''}`;
+        } catch (e) { $('m-res').className = 'resultado ruim'; $('m-res').textContent = e.message; }
+      };
+      $('m-outra').addEventListener('change', montarTela);
+      $('m-mais-chave').addEventListener('click', () => { $('m-pares').insertAdjacentHTML('beforeend', parHtml(t.colunas[0].nome, null, outraTab())); atualizar(); });
+      $('m-pares').addEventListener('click', ev => { const x = ev.target.closest('[data-remover-par]'); if (x) { x.closest('.par-chave').remove(); atualizar(); } });
+      $('modal-corpo').addEventListener('change', ev => { if (ev.target.id !== 'm-outra') atualizar(); });
+      ui.etapasMesclar = etapas;
+      montarTela();
+    },
+    aoConfirmar() {
+      if ($('m-res').classList.contains('ruim') && !/acharam par|Nenhuma linha combinou/.test($('m-res').textContent)) return $('m-res').textContent;
+      adicionarEtapa(ui.etapasMesclar());
+    },
+  });
+}
+
+// Acrescentar consultas: põe as linhas de outras consultas embaixo desta (como colar uma tabela embaixo da outra)
+function janelaAcrescentar() {
+  const c = atual(); const t = tabelaEntrada();
+  const outras = outrasConsultas(c);
+  if (!outras.length) return aviso('Não há outra consulta para acrescentar. Crie uma em + Nova consulta.', 'erro');
+  abrirJanela({
+    titulo: 'Acrescentar consultas', ok: 'Acrescentar',
+    corpo: `<p class="ajuda">As linhas das consultas marcadas vão para baixo das linhas desta. Colunas com o <b>mesmo nome</b> se juntam; as que só existem em uma ficam vazias (null) nas outras (no M: Table.Combine).</p>
+      <div class="checks" id="a-lista">${outras.map(q => `<label><input type="checkbox" value="${esc(q.nome)}"> ${esc(q.nome)}</label>`).join('')}</div>
+      <div class="resultado" id="a-res">Marque pelo menos uma consulta.</div>`,
+    aoAbrir() {
+      const atualizar = () => {
+        const nomes = [...$('a-lista').querySelectorAll('input:checked')].map(x => x.value);
+        if (!nomes.length) { $('a-res').className = 'resultado'; $('a-res').textContent = 'Marque pelo menos uma consulta.'; return; }
+        const tabs = nomes.map(n => [n, exec(ui.consultas.find(q => q.nome === n)).tabela]);
+        const ruim = tabs.find(([, tb]) => !tb); if (ruim) { $('a-res').className = 'resultado ruim'; $('a-res').textContent = `A consulta "${ruim[0]}" está com erro.`; return; }
+        const todas = [t, ...tabs.map(([, tb]) => tb)];
+        const nomesCol = [...new Set(todas.flatMap(tb => tb.colunas.map(x => x.nome)))];
+        const parciais = nomesCol.filter(n => !todas.every(tb => tb.colunas.some(x => x.nome === n)));
+        const total = todas.reduce((s2, tb) => s2 + tb.linhas.length, 0);
+        $('a-res').className = 'resultado ok';
+        $('a-res').innerHTML = `Ficam <b>${total.toLocaleString('pt-BR')}</b> linhas e <b>${nomesCol.length}</b> colunas.${parciais.length ? `<br>Colunas que não existem em todas (ficam vazias onde faltam): ${parciais.map(esc).join(', ')}.` : ''}`;
+      };
+      $('a-lista').addEventListener('change', atualizar);
+    },
+    aoConfirmar() {
+      const nomes = [...$('a-lista').querySelectorAll('input:checked')].map(x => x.value);
+      if (!nomes.length) return 'Marque pelo menos uma consulta.';
+      adicionarEtapa({ tipo: 'acrescentar', consultas: nomes });
+    },
+  });
+}
+
+// Agrupar por: resume as linhas por grupo, como uma tabela dinâmica
+function janelaAgrupar(pre) {
+  const t = tabelaEntrada();
+  const tipoDe = n => (t.colunas.find(x => x.nome === n) || {}).tipo;
+  const textoPadrao = pre || (t.colunas.find(x => x.tipo === 'texto') || t.colunas[0]).nome;
+  const numPadrao = (t.colunas.find(x => x.tipo === 'inteiro' || x.tipo === 'decimal') || t.colunas[0]).nome;
+  const opsHtml = sel => Object.entries(M.AGREGACOES).map(([k, a]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${a.rotulo}</option>`).join('');
+  const chaveHtml = col => `<div class="par-chave"><select data-chave aria-label="Agrupar por">${opcoesColunas(t, col)}</select><button class="cond-x" type="button" data-remover aria-label="Remover">×</button></div>`;
+  const agHtml = (nome, op, col) => `<div class="ag-linha"><input type="text" data-ag="nome" value="${esc(nome)}" aria-label="Nome da nova coluna"><select data-ag="op" aria-label="Operação">${opsHtml(op)}</select><select data-ag="col" aria-label="Coluna">${opcoesColunas(t, col)}</select><button class="cond-x" type="button" data-remover aria-label="Remover">×</button></div>`;
+  abrirJanela({
+    titulo: 'Agrupar por', largo: true, ok: 'Agrupar',
+    corpo: `<p class="ajuda">Junta as linhas que têm os mesmos valores nas colunas de grupo e calcula um resumo para cada grupo, como uma tabela dinâmica (no M: Table.Group). As outras colunas saem.</p>
+      <div class="campo"><span class="rotulo">Agrupar por</span><div id="g-chaves" class="conds">${chaveHtml(textoPadrao)}</div><div><button class="btn peq" type="button" id="g-mais-chave">+ Outra coluna de grupo</button></div></div>
+      <div class="campo"><span class="rotulo">Novas colunas (nome · operação · coluna)</span><div id="g-ags" class="conds">${agHtml('Contagem', 'contar', numPadrao)}${agHtml(`Soma de ${numPadrao}`, 'soma', numPadrao)}</div><div><button class="btn peq" type="button" id="g-mais-ag">+ Outra conta</button></div></div>
+      <div class="resultado" id="g-res">—</div>`,
+    aoAbrir() {
+      const ler = () => {
+        const chaves = [...$('g-chaves').querySelectorAll('[data-chave]')].map(x => x.value);
+        if (new Set(chaves).size !== chaves.length) throw new M.FalhaEtapa('A mesma coluna aparece duas vezes em "Agrupar por".');
+        const agregacoes = [...$('g-ags').querySelectorAll('.ag-linha')].map(el => {
+          const op = el.querySelector('[data-ag=op]').value; const col = el.querySelector('[data-ag=col]').value;
+          const nome = el.querySelector('[data-ag=nome]').value.trim();
+          if (!nome) throw new M.FalhaEtapa('Uma das novas colunas está sem nome.');
+          return { nome, op, coluna: M.AGREGACOES[op].semColuna ? null : col, tipo: M.AGREGACOES[op].tipo(tipoDe(col)) };
+        });
+        const nomes = [...chaves, ...agregacoes.map(a => a.nome)]; const rep = nomes.find((n, i) => nomes.indexOf(n) !== i);
+        if (rep) throw new M.FalhaEtapa(`O nome "${rep}" aparece duas vezes. Cada coluna do resultado precisa de um nome diferente.`);
+        return { tipo: 'agrupar', chaves, agregacoes };
+      };
+      const atualizar = () => {
+        $('g-ags').querySelectorAll('.ag-linha').forEach(el => { el.querySelector('[data-ag=col]').disabled = !!M.AGREGACOES[el.querySelector('[data-ag=op]').value].semColuna; });
+        $('modal-corpo').querySelectorAll('#g-chaves [data-remover]').forEach(b => { b.hidden = $('g-chaves').children.length === 1; });
+        try {
+          const etapa = ler();
+          const tb = M.ETAPAS.agrupar.executar(t, etapa);
+          const prim = tb.linhas.slice(0, 5);
+          $('g-res').className = 'resultado ok';
+          $('g-res').innerHTML = `Ficam <b>${tb.linhas.length.toLocaleString('pt-BR')}</b> grupo(s) de ${t.linhas.length.toLocaleString('pt-BR')} linhas.<table><tr>${tb.colunas.map(x => `<td><b>${esc(x.nome)}</b></td>`).join('')}</tr>${prim.map(l => `<tr>${l.map((v, k) => `<td>${esc(M.formatar(v, tb.colunas[k].tipo))}</td>`).join('')}</tr>`).join('')}</table>`;
+        } catch (e) { $('g-res').className = 'resultado ruim'; $('g-res').textContent = e.message; }
+      };
+      $('g-mais-chave').addEventListener('click', () => { $('g-chaves').insertAdjacentHTML('beforeend', chaveHtml(t.colunas[0].nome)); atualizar(); });
+      $('g-mais-ag').addEventListener('click', () => { $('g-ags').insertAdjacentHTML('beforeend', agHtml(`Média de ${numPadrao}`, 'media', numPadrao)); atualizar(); });
+      $('modal-corpo').addEventListener('click', ev => { const x = ev.target.closest('[data-remover]'); if (x) { const box = x.parentElement.parentElement; if (box.children.length > 1) { x.parentElement.remove(); atualizar(); } } });
+      // trocar operação ou coluna sugere um nome novo, se o nome ainda era o sugerido
+      $('g-ags').addEventListener('change', ev => {
+        const el = ev.target.closest('.ag-linha'); if (!el || ev.target.matches('[data-ag=nome]')) return;
+        const nome = el.querySelector('[data-ag=nome]'); const op = el.querySelector('[data-ag=op]').value; const col = el.querySelector('[data-ag=col]').value;
+        if (!nome.dataset.mexido) nome.value = M.AGREGACOES[op].semColuna ? 'Contagem' : `${M.AGREGACOES[op].rotulo} de ${col}`;
+      });
+      $('g-ags').addEventListener('input', ev => { if (ev.target.matches('[data-ag=nome]')) ev.target.dataset.mexido = '1'; });
+      $('modal-corpo').addEventListener('input', atualizar);
+      $('modal-corpo').addEventListener('change', atualizar);
+      ui.lerAgrupar = ler;
+      atualizar();
+    },
+    aoConfirmar() { adicionarEtapa(ui.lerAgrupar()); },
+  });
+}
+
 // Janela simples de confirmação (o navegador do artefato não mostra confirm())
 function confirmar(titulo, texto, ok, acao) {
   abrirJanela({ titulo, ok, corpo: `<p style="margin:0">${texto}</p>`, aoConfirmar: () => { acao(); } });
 }
 
 /* ---------------- 6. ações ---------------- */
-function adicionarEtapa(etapa) {
+function adicionarEtapa(etapaOuLista) {
   ui.editandoFormula = false;
   const c = atual(); if (!c) return;
   const pos = indiceEtapa();
   const noFim = pos === c.etapas.length - 1;
-  const novo = M.inserirEtapa(c, etapa, pos);
+  let novo = pos;
+  (Array.isArray(etapaOuLista) ? etapaOuLista : [etapaOuLista]).forEach(e => { novo = M.inserirEtapa(c, e, novo); });
   ui.etapaSel = noFim ? null : novo;
   ui.msgCelula = '';
   salvar(); render();
   const nome = c.etapas[novo].nome;
-  const falha = M.executar(c).erro;
+  const falha = exec(c).erro;
   if (falha) aviso(`Etapa "${nome}" criada, mas a etapa "${falha.etapa}" ficou com erro. Clique nela para ver.`, 'erro', 6000);
   else if (!noFim) aviso(`Etapa "${nome}" inserida depois de "${c.etapas[pos].nome}". As etapas seguintes continuam na consulta.`);
   else aviso(`Etapa "${nome}" aplicada.`, 'ok', 2400);
@@ -708,15 +893,19 @@ function excluirEtapa(i) {
     if (ui.etapaSel !== null && ui.etapaSel >= i) ui.etapaSel = Math.max(0, ui.etapaSel - 1);
     if (ui.etapaSel !== null && ui.etapaSel >= c.etapas.length - 1) ui.etapaSel = null;
     salvar(); render();
-    const falha = M.executar(c).erro;
+    const falha = exec(c).erro;
     aviso(falha ? `Etapa "${nome}" excluída. A etapa "${falha.etapa}" dependia dela e agora está com erro.` : `Etapa "${nome}" excluída.`, falha ? 'erro' : 'ok', 5000);
   };
   if (i === c.etapas.length - 1) fazer();
   else confirmar('Excluir etapa', `Excluir a etapa <b>${esc(nome)}</b>? Ela está no meio da consulta, e as etapas seguintes podem depender dela.`, 'Excluir', fazer);
 }
+// Quais consultas usam uma consulta (em Mesclar ou Acrescentar)
+const usaConsulta = (e, nome) => e.consulta === nome || (e.consultas || []).includes(nome);
+const consultasQueUsam = nome => ui.consultas.filter(q => q.nome !== nome && q.etapas.some(e => usaConsulta(e, nome))).map(q => q.nome);
 function excluirConsulta(id) {
   const c = ui.consultas.find(x => x.id === id); if (!c) return;
-  confirmar('Excluir consulta', `Excluir a consulta <b>${esc(c.nome)}</b> e todas as suas etapas?`, 'Excluir', () => {
+  const usadaPor = consultasQueUsam(c.nome);
+  confirmar('Excluir consulta', `Excluir a consulta <b>${esc(c.nome)}</b> e todas as suas etapas?${usadaPor.length ? `<br><br>Atenção: ela é usada por <b>${usadaPor.map(esc).join(', ')}</b>, que vai(ão) ficar com erro.` : ''}`, 'Excluir', () => {
     ui.consultas = ui.consultas.filter(x => x.id !== id);
     if (ui.sel === id) { ui.sel = ui.consultas[0] ? ui.consultas[0].id : null; ui.etapaSel = null; }
     salvar(); render(); aviso(`Consulta "${c.nome}" excluída.`);
@@ -734,6 +923,9 @@ function ferramenta(nome) {
   if (nome === 'tipos') return janelaTipos();
   if (nome === 'renomear') return janelaRenomear();
   if (nome === 'adicionar') return janelaPersonalizada();
+  if (nome === 'mesclar') return janelaMesclar();
+  if (nome === 'acrescentar') return janelaAcrescentar();
+  if (nome === 'agrupar') return janelaAgrupar();
 }
 
 /* ---------------- 7. início ---------------- */
@@ -761,7 +953,14 @@ $('nome-consulta').addEventListener('change', ev => {
   const novo = ev.target.value.trim();
   if (!novo) { ev.target.value = c.nome; return aviso('O nome da consulta não pode ficar vazio.', 'erro'); }
   if (novo !== c.nome && ui.consultas.some(x => x.nome === novo)) { ev.target.value = c.nome; return aviso(`Já existe uma consulta chamada "${novo}".`, 'erro'); }
-  c.nome = novo; salvar(); renderConsultas();
+  const antigo = c.nome; c.nome = novo;
+  let trocas = 0;
+  ui.consultas.forEach(q => q.etapas.forEach(e => {
+    if (e.consulta === antigo) { e.consulta = novo; trocas++; }
+    if (e.consultas && e.consultas.includes(antigo)) { e.consultas = e.consultas.map(n => (n === antigo ? novo : n)); trocas++; }
+  }));
+  salvar(); render();
+  if (trocas) aviso(`Consulta renomeada. ${trocas} etapa(s) que usavam "${antigo}" foram atualizadas.`);
 });
 $('formula').addEventListener('focus', () => { if ($('formula').disabled) return; ui.editandoFormula = true; $('formula-acoes').hidden = false; });
 $('formula').addEventListener('input', ajustarAlturaFormula);
