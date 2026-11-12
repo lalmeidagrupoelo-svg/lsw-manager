@@ -534,6 +534,75 @@
     return op.semValor ? op.expr(c) : op.expr(c, literalM(valor, op.soTexto ? 'texto' : tipo));
   }
 
+  // Caminho de volta do formulário de filtro: lê a expressão e devolve as linhas
+  // [{ junta, coluna, operador, valor }]. Devolve null se a expressão foi escrita à mão
+  // de um jeito que o formulário não representa (aí a janela abre na aba Avançado).
+  function condicoesDeExpr(expr) {
+    let arvore;
+    try { arvore = analisar(semEach(expr)); } catch { return null; }
+    const pad2 = n => String(n).padStart(2, '0');
+    const valorDe = no => {
+      if (no.k === 'lit' && typeof no.v === 'string') return no.v;
+      if (no.k === 'lit' && typeof no.v === 'number') return String(no.v).replace('.', ',');
+      if (no.k === 'lit' && typeof no.v === 'boolean') return no.v ? 'true' : 'false';
+      if (no.k === 'neg' && no.a.k === 'lit' && typeof no.a.v === 'number') return '-' + String(no.a.v).replace('.', ',');
+      if (no.k === 'fn' && no.nome === '#date' && no.args.every(a => a.k === 'lit')) { const [a, m, d] = no.args.map(x => x.v); return `${pad2(d)}/${pad2(m)}/${a}`; }
+      if (no.k === 'fn' && no.nome === '#time' && no.args.every(a => a.k === 'lit')) { const [h, m] = no.args.map(x => x.v); return `${pad2(h)}:${pad2(m)}`; }
+      return undefined;
+    };
+    const OP_BIN = { '=': 'igual', '<>': 'diferente', '>': 'maior', '>=': 'maiorIgual', '<': 'menor', '<=': 'menorIgual' };
+    const OP_FN = { 'Text.Contains': 'contem', 'Text.StartsWith': 'comeca', 'Text.EndsWith': 'termina' };
+    const condicao = no => {
+      if (no.k === 'bin' && OP_BIN[no.op] && no.a.k === 'col') {
+        if (no.b.k === 'lit' && no.b.v === null && no.op === '=') return { coluna: no.a.nome, operador: 'vazio', valor: '' };
+        if (no.b.k === 'lit' && no.b.v === null && no.op === '<>') return { coluna: no.a.nome, operador: 'diferente', valor: null }; // metade do "não está vazio"
+        const v = valorDe(no.b); if (v !== undefined) return { coluna: no.a.nome, operador: OP_BIN[no.op], valor: v };
+      }
+      if (no.k === 'fn' && OP_FN[no.nome] && no.args.length === 2 && no.args[0].k === 'col' && no.args[1].k === 'lit') return { coluna: no.args[0].nome, operador: OP_FN[no.nome], valor: no.args[1].v };
+      if (no.k === 'not' && no.a.k === 'fn' && no.a.nome === 'Text.Contains' && no.a.args[0].k === 'col' && no.a.args[1].k === 'lit') return { coluna: no.a.args[0].nome, operador: 'naoContem', valor: no.a.args[1].v };
+      return null;
+    };
+    // Achata a árvore da esquerda para a direita: ((c1 and c2) or c3) → c1, and c2, or c3
+    const itens = [];
+    let no = arvore;
+    while (no.k === 'bin' && (no.op === 'and' || no.op === 'or') && !condicao(no)) {
+      const dir = condicao(no.b); if (!dir) return null;
+      itens.unshift({ junta: no.op, ...dir, no: no.b });
+      no = no.a;
+    }
+    const primeira = condicao(no); if (!primeira) return null;
+    itens.unshift({ junta: null, ...primeira, no });
+    // junta "[C] <> null" seguido de "and [C] <> \"\"" em "não está vazio"
+    const out = [];
+    for (let i = 0; i < itens.length; i++) {
+      const a = itens[i], b = itens[i + 1];
+      const ehNulo = x => x && x.no.k === 'bin' && x.no.op === '<>' && x.no.b.k === 'lit' && x.no.b.v === null;
+      const ehVazioTxt = x => x && x.no.k === 'bin' && x.no.op === '<>' && x.no.b.k === 'lit' && x.no.b.v === '';
+      if (ehNulo(a) && ehVazioTxt(b) && b.junta === 'and' && a.coluna === b.coluna) { out.push({ junta: a.junta, coluna: a.coluna, operador: 'naoVazio', valor: '' }); i++; continue; }
+      if (ehNulo(a)) return null;
+      out.push({ junta: a.junta, coluna: a.coluna, operador: a.operador, valor: a.valor });
+    }
+    // confere: montar de novo pelo formulário tem que dar a mesma conta (senão havia parênteses de outro jeito)
+    try {
+      const refeita = juntarCondicoes(out.map(c => ({ junta: c.junta, expr: OPERADORES[c.operador].semValor ? OPERADORES[c.operador].expr('[' + c.coluna + ']') : OPERADORES[c.operador].expr('[' + c.coluna + ']', c.valor === null ? 'null' : '§') })));
+      const forma = e => JSON.stringify(analisar(e), (k, v) => (k === 'v' ? undefined : v));
+      if (forma(refeita.replace(/§/g, '0')) !== forma(semEach(expr)).replace(/"k":"fn","nome":"#(date|time)","args":\[[^\]]*\]/g, '"k":"lit"').replace(/"k":"neg","a":\{"k":"lit"\}/g, '"k":"lit"') && forma(refeita.replace(/§/g, '0')) !== forma(semEach(expr))) return null;
+    } catch { return null; }
+    return out;
+  }
+
+  // Junta as condições do formulário lendo de cima para baixo: c1 E c2 OU c3 = (c1 E c2) OU c3
+  function juntarCondicoes(conds) {
+    let expr = '', opAnterior = null;
+    conds.forEach(({ junta, expr: e }, i) => {
+      if (i === 0) { expr = e; return; }
+      if (opAnterior && opAnterior !== junta) expr = `(${expr})`;
+      expr = `${expr} ${junta} ${e}`;
+      opAnterior = junta;
+    });
+    return expr;
+  }
+
   // Testa uma expressão nas primeiras linhas (prévia ao vivo da coluna personalizada)
   function testarExpressao(tab, expr, n = 5) {
     const arvore = analisar(semEach(expr));
@@ -705,7 +774,7 @@
 
   const api = {
     TIPOS, TIPO_DO_M, FUNCOES_M, ETAPAS, OPERADORES, ErroM, FalhaEtapa,
-    lerM, lerLinhaEtapa, dividirTopo,
+    lerM, lerLinhaEtapa, dividirTopo, condicoesDeExpr, juntarCondicoes,
     ehErro, converter, formatar, detectarTipo, lerCsv, lerNumero, lerData,
     analisar, avaliar, colunasUsadas, gerarM, gerarMEtapa, executar, qualidade,
     consultaDeCsv, inserirEtapa, nomeUnico, exprCondicao, literalM, testarExpressao, idM,

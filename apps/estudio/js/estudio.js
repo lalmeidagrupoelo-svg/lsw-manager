@@ -105,6 +105,7 @@ function renderEtapas() {
   $('lista-etapas').innerHTML = c.etapas.map((e, i) => `
     <li class="${i === sel ? 'on' : ''}${i > sel ? ' depois' : ''}${falha && falha.indice === i ? ' com-erro' : ''}" data-etapa="${i}" title="${esc(M.ETAPAS[e.tipo].descricao)}">
       <span class="ico">${falha && falha.indice === i ? '⚠' : i + 1}</span><span class="nome">${esc(e.nome)}</span>
+      ${e.tipo === 'filtrar' ? `<button class="x editar" type="button" data-editar-etapa="${i}" aria-label="Editar o filtro ${esc(e.nome)}" title="Editar este filtro">✎</button>` : ''}
       ${i > 0 ? `<button class="x" type="button" data-excluir-etapa="${i}" aria-label="Excluir etapa ${esc(e.nome)}">×</button>` : ''}
     </li>`).join('');
 }
@@ -365,107 +366,140 @@ function janelaColunas(modo, pre) {
   });
 }
 
-// Filtrar linhas: lista de condições (+ acrescenta, × remove, E/OU antes de cada uma) ou expressão M
-// As condições são lidas de cima para baixo: c1 E c2 OU c3 = (c1 E c2) OU c3.
-function juntarCondicoes(conds) {
-  let expr = '', opAnterior = null;
-  conds.forEach(({ junta, expr: e }, i) => {
-    if (i === 0) { expr = e; return; }
-    if (opAnterior && opAnterior !== junta) expr = `(${expr})`;
-    expr = `${expr} ${junta} ${e}`;
-    opAnterior = junta;
-  });
-  return expr;
-}
+// Filtrar linhas: lista de condições (+ acrescenta, × remove, E/OU antes de cada uma) ou expressão M.
+// Se a etapa selecionada já é um filtro, a janela EDITA esse filtro (como o Power Query):
+// vem preenchida e mostra os valores de antes do filtro. Senão, cria uma etapa nova.
 function janelaFiltrar(pre) {
-  const t = tabelaEntrada();
+  const c = atual(); const idx = indiceEtapa();
+  const editando = c.etapas[idx] && c.etapas[idx].tipo === 'filtrar';
+  const entrada = editando ? M.executar(c, idx - 1) : resultadoAtual();
+  if (!entrada.tabela) return aviso('A etapa anterior ao filtro está com erro; corrija-a antes de editar o filtro.', 'erro');
+  const t = entrada.tabela;
+  const exprAtual = editando ? c.etapas[idx].expr : '';
+  const condsAtuais = editando ? M.condicoesDeExpr(exprAtual) : null;
   const ops = Object.entries(M.OPERADORES).map(([k, o]) => `<option value="${k}">${o.rotulo}</option>`).join('');
-  const tipoDe = nome => (t.colunas.find(c => c.nome === nome) || {}).tipo;
+  const tipoDe = nome => (t.colunas.find(x => x.nome === nome) || {}).tipo;
+  const cacheValores = {};
   const valoresDe = nome => {
-    const k = t.colunas.findIndex(c => c.nome === nome); if (k < 0) return [];
+    if (cacheValores[nome]) return cacheValores[nome];
+    const k = t.colunas.findIndex(x => x.nome === nome); if (k < 0) return [];
     const vistos = new Set();
-    for (const l of t.linhas) { const v = l[k]; if (v !== null && !M.ehErro(v) && v !== '') vistos.add(M.formatar(v, t.colunas[k].tipo)); if (vistos.size >= 60) break; }
-    return [...vistos].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
+    for (const l of t.linhas) { const v = l[k]; if (v !== null && !M.ehErro(v) && v !== '') vistos.add(M.formatar(v, t.colunas[k].tipo)); if (vistos.size >= 200) break; }
+    return (cacheValores[nome] = [...vistos].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true })));
   };
-  let seq = 0;
-  const htmlCondicao = (col, primeira) => {
-    const n = ++seq;
-    return `<div class="cond" data-cond="${n}">
-      ${primeira ? '<span class="cond-junta cond-onde">Onde</span>' : `<select class="cond-junta" data-campo="junta" aria-label="Como juntar com a condição de cima"><option value="and">E</option><option value="or">OU</option></select>`}
-      <select data-campo="col" aria-label="Coluna">${opcoesColunas(t, col)}</select>
-      <select data-campo="op" aria-label="Condição">${ops}</select>
-      <input type="text" data-campo="val" list="f-lista${n}" aria-label="Valor" autocomplete="off"><datalist id="f-lista${n}"></datalist>
+  const htmlCondicao = (cond, primeira) => `<div class="cond">
+      ${primeira ? '<span class="cond-junta cond-onde">Onde</span>' : `<select class="cond-junta" data-campo="junta" aria-label="Como juntar com a condição de cima"><option value="and" ${cond.junta === 'or' ? '' : 'selected'}>E</option><option value="or" ${cond.junta === 'or' ? 'selected' : ''}>OU</option></select>`}
+      <select data-campo="col" aria-label="Coluna">${opcoesColunas(t, cond.coluna)}</select>
+      <select data-campo="op" aria-label="Condição">${ops.replace(`value="${cond.operador || 'igual'}"`, `value="${cond.operador || 'igual'}" selected`)}</select>
+      <div class="cond-valor">
+        <input type="text" data-campo="val" value="${esc(cond.valor || '')}" aria-label="Valor" autocomplete="off">
+        <button type="button" class="cond-abrir" data-abrir-valores tabindex="-1" aria-label="Ver os valores da coluna">▾</button>
+        <ul class="cond-sugestoes" role="listbox" hidden></ul>
+      </div>
       <button class="cond-x" type="button" data-remover-cond aria-label="Remover esta condição" title="Remover esta condição">×</button>
     </div>`;
-  };
+  const iniciais = condsAtuais ? condsAtuais.slice() : [{ coluna: pre, operador: 'igual', valor: '' }];
+  // veio do menu de outra coluna enquanto edita: acrescenta uma condição para ela
+  if (condsAtuais && pre && !condsAtuais.some(x => x.coluna === pre)) iniciais.push({ junta: 'and', coluna: pre, operador: 'igual', valor: '' });
+  const comecaAvancado = editando && !condsAtuais;
   abrirJanela({
-    titulo: 'Filtrar linhas', largo: true,
-    corpo: `<div class="abas" role="tablist"><button type="button" class="on" data-aba="basico">Básico</button><button type="button" data-aba="avancado">Avançado (M)</button></div>
-      <div id="aba-basico" class="campo" style="gap:8px">
+    titulo: editando ? `Editar filtro · ${c.etapas[idx].nome}` : 'Filtrar linhas', largo: true, ok: editando ? 'Salvar filtro' : 'Aplicar',
+    corpo: `${editando ? `<p class="ajuda">Você está editando a etapa <b>${esc(c.etapas[idx].nome)}</b>. Os valores mostrados são os de <b>antes</b> do filtro, então dá para trocar por qualquer outro.</p>` : ''}
+      <div class="abas" role="tablist"><button type="button" class="${comecaAvancado ? '' : 'on'}" data-aba="basico">Básico</button><button type="button" class="${comecaAvancado ? 'on' : ''}" data-aba="avancado">Avançado (M)</button></div>
+      <div id="aba-basico" class="campo" style="gap:8px" ${comecaAvancado ? 'hidden' : ''}>
         <span class="rotulo">Manter as linhas em que</span>
-        <div id="f-conds" class="conds">${htmlCondicao(pre, true)}</div>
+        <div id="f-conds" class="conds">${iniciais.map((cd, i) => htmlCondicao(cd, i === 0)).join('')}</div>
         <div><button class="btn peq" type="button" id="f-mais">+ Adicionar condição</button></div>
-        <p class="ajuda">As condições são lidas de cima para baixo. <b>E</b>: as duas precisam valer. <b>OU</b>: basta uma valer. Misturando E e OU, o que está acima vira um bloco entre parênteses.</p>
+        <p class="ajuda">As condições são lidas de cima para baixo. <b>E</b>: as duas precisam valer. <b>OU</b>: basta uma valer. Misturando E e OU, o que está acima vira um bloco entre parênteses. Para achar linhas sem valor, use "está vazio".</p>
       </div>
-      <div id="aba-avancado" class="campo" hidden>
+      <div id="aba-avancado" class="campo" ${comecaAvancado ? '' : 'hidden'}>
         <label for="f-expr">Condição em M</label>
-        <textarea id="f-expr" spellcheck="false" placeholder='each [OPERAÇÃO] = "SAC" and [CHAMADAS] > 40'></textarea>
-        <p class="ajuda">Use [Coluna], = &lt;&gt; &gt; &lt; &gt;= &lt;=, and, or, not, parênteses e funções como Text.Contains([CANAL], "VO") ou [DATA] &gt;= #date(2026, 11, 5).</p>
+        <textarea id="f-expr" spellcheck="false" placeholder='each [OPERAÇÃO] = "SAC" and [CHAMADAS] > 40'>${comecaAvancado ? esc('each ' + exprAtual) : ''}</textarea>
+        <p class="ajuda">Use [Coluna], = &lt;&gt; &gt; &lt; &gt;= &lt;=, and, or, not, parênteses e funções como Text.Contains([CANAL], "VO") ou [DATA] &gt;= #date(2026, 11, 5).${comecaAvancado ? ' Este filtro foi escrito à mão de um jeito que o modo Básico não mostra, por isso abriu aqui.' : ''}</p>
       </div>
       <div class="resultado" id="f-res">—</div>`,
     aoAbrir() {
-      let aba = 'basico';
+      let aba = comecaAvancado ? 'avancado' : 'basico';
       const linhas = () => [...$('f-conds').querySelectorAll('.cond')];
       const campo = (el, nome) => el.querySelector(`[data-campo="${nome}"]`);
       const montar = () => {
         if (aba === 'avancado') return $('f-expr').value.trim();
         const conds = linhas().map((el, i) => {
           const col = campo(el, 'col').value, op = campo(el, 'op').value, val = campo(el, 'val').value;
-          if (!M.OPERADORES[op].semValor && val.trim() === '' && tipoDe(col) !== 'texto') throw new M.FalhaEtapa(`Preencha o valor da condição ${i + 1}.`);
+          if (!M.OPERADORES[op].semValor && val.trim() === '') throw new M.FalhaEtapa(`A condição ${i + 1} está sem valor. Escolha um valor, use "está vazio" ou remova a condição no ×.`);
           return { junta: i ? campo(el, 'junta').value : null, expr: M.exprCondicao(col, op, val, tipoDe(col)) };
         });
-        return juntarCondicoes(conds);
+        return M.juntarCondicoes(conds);
       };
+      // Lista de valores própria: mostra TODOS os valores da coluna ao abrir, e filtra só pelo que for digitado
+      const mostrarValores = (el, filtrarPorTexto) => {
+        const lista = el.querySelector('.cond-sugestoes'); const input = campo(el, 'val');
+        if (input.disabled) return;
+        const q = filtrarPorTexto ? input.value.trim().toLowerCase() : '';
+        const vals = valoresDe(campo(el, 'col').value).filter(v => !q || v.toLowerCase().includes(q)).slice(0, 80);
+        lista.innerHTML = vals.length ? vals.map(v => `<li role="option" data-valor="${esc(v)}" class="${v === input.value ? 'on' : ''}">${v !== v.trim() ? `<span class="mono">"${esc(v)}"</span> <small>tem espaços sobrando</small>` : esc(v)}</li>`).join('') : '<li class="vazio">Nenhum valor com esse texto</li>';
+        lista.hidden = false;
+      };
+      const fecharValores = () => $('f-conds').querySelectorAll('.cond-sugestoes').forEach(l => { l.hidden = true; });
       const atualizar = () => {
         const todas = linhas();
         todas.forEach(el => {
           const col = campo(el, 'col').value; const op = M.OPERADORES[campo(el, 'op').value];
           const val = campo(el, 'val'); const tipo = tipoDe(col);
-          val.disabled = op.semValor;
-          val.placeholder = op.semValor ? '—' : tipo === 'data' ? 'dd/mm/aaaa' : tipo === 'hora' ? 'hh:mm' : tipo === 'inteiro' || tipo === 'decimal' ? 'ex.: 40' : 'texto';
-          const lista = el.querySelector('datalist');
-          if (lista.dataset.col !== col) { lista.dataset.col = col; lista.innerHTML = valoresDe(col).map(v => `<option value="${esc(v)}">`).join(''); }
+          val.disabled = op.semValor; el.querySelector('[data-abrir-valores]').disabled = op.semValor;
+          val.placeholder = op.semValor ? '—' : tipo === 'data' ? 'dd/mm/aaaa' : tipo === 'hora' ? 'hh:mm' : tipo === 'inteiro' || tipo === 'decimal' ? 'ex.: 40' : 'escolha ou digite';
+          el.classList.toggle('incompleta', !op.semValor && val.value.trim() === '');
           el.querySelector('[data-remover-cond]').hidden = todas.length === 1;
         });
         try {
           const expr = montar();
           if (!expr) { $('f-res').className = 'resultado'; $('f-res').textContent = 'Escreva a condição.'; return; }
           const arvore = M.analisar(expr.replace(/^each\s+/, ''));
-          M.colunasUsadas(arvore).forEach(c => { if (!tipoDe(c)) throw new M.FalhaEtapa(`A coluna "${c}" não existe nesta etapa.`); });
-          const objeto = l => Object.fromEntries(t.colunas.map((c, k) => [c.nome, l[k]]));
+          M.colunasUsadas(arvore).forEach(x => { if (!tipoDe(x)) throw new M.FalhaEtapa(`A coluna "${x}" não existe nesta etapa.`); });
+          const objeto = l => Object.fromEntries(t.colunas.map((x, k) => [x.nome, l[k]]));
           let ficam = 0;
           for (const l of t.linhas) { const r = M.avaliar(arvore, objeto(l)); if (M.ehErro(r)) throw new M.FalhaEtapa(r.mensagem); if (r === true) ficam++; }
-          $('f-res').className = 'resultado ok';
-          $('f-res').innerHTML = `Ficam <b>${ficam.toLocaleString('pt-BR')}</b> de ${t.linhas.length.toLocaleString('pt-BR')} linhas.<br><span class="mono">Table.SelectRows(..., each ${esc(expr.replace(/^each\s+/, ''))})</span>`;
+          $('f-res').className = 'resultado ' + (ficam ? 'ok' : 'ruim');
+          $('f-res').innerHTML = `Ficam <b>${ficam.toLocaleString('pt-BR')}</b> de ${t.linhas.length.toLocaleString('pt-BR')} linhas.${ficam ? '' : ' Nenhuma linha atende a todas as condições: confira os valores e o E/OU.'}<br><span class="mono">Table.SelectRows(..., each ${esc(expr.replace(/^each\s+/, ''))})</span>`;
         } catch (e) { $('f-res').className = 'resultado ruim'; $('f-res').textContent = e.message; }
       };
       $('f-mais').addEventListener('click', () => {
-        const ultima = linhas().pop();
-        $('f-conds').insertAdjacentHTML('beforeend', htmlCondicao(ultima ? campo(ultima, 'col').value : '', false));
-        const nova = linhas().pop();
-        if (linhas().length > 2) campo(nova, 'junta').value = campo(linhas()[linhas().length - 2], 'junta').value; // repete o E/OU da linha de cima
-        campo(nova, 'col').focus();
+        const todas = linhas(); const ultima = todas[todas.length - 1];
+        const junta = todas.length > 1 ? campo(ultima, 'junta').value : 'and'; // repete o E/OU da linha de cima
+        $('f-conds').insertAdjacentHTML('beforeend', htmlCondicao({ junta, coluna: campo(ultima, 'col').value, operador: 'igual', valor: '' }, false));
+        const nova = linhas().pop(); campo(nova, 'val').focus();
         atualizar();
       });
       $('f-conds').addEventListener('click', ev => {
-        const x = ev.target.closest('[data-remover-cond]'); if (!x) return;
-        x.closest('.cond').remove();
-        const primeira = linhas()[0]; const j = campo(primeira, 'junta');
-        if (j) j.outerHTML = '<span class="cond-junta cond-onde">Onde</span>'; // a de cima não tem E/OU
-        atualizar();
+        const x = ev.target.closest('[data-remover-cond]');
+        if (x) {
+          x.closest('.cond').remove();
+          const j = campo(linhas()[0], 'junta');
+          if (j) j.outerHTML = '<span class="cond-junta cond-onde">Onde</span>'; // a de cima não tem E/OU
+          return atualizar();
+        }
+        const abrir = ev.target.closest('[data-abrir-valores]');
+        if (abrir) { const el = abrir.closest('.cond'); const l = el.querySelector('.cond-sugestoes'); if (l.hidden) { fecharValores(); mostrarValores(el, false); campo(el, 'val').focus(); } else l.hidden = true; return; }
       });
+      // escolher um valor da lista (mousedown, para não perder o foco antes)
+      $('f-conds').addEventListener('mousedown', ev => {
+        const li = ev.target.closest('[data-valor]'); if (!li) return;
+        ev.preventDefault();
+        const el = li.closest('.cond'); campo(el, 'val').value = li.dataset.valor;
+        fecharValores(); atualizar();
+      });
+      $('f-conds').addEventListener('focusin', ev => { if (ev.target.matches('[data-campo="val"]')) { fecharValores(); mostrarValores(ev.target.closest('.cond'), false); } });
+      $('f-conds').addEventListener('focusout', ev => { if (ev.target.matches('[data-campo="val"]')) setTimeout(() => { if (!ev.target.closest('.cond').contains(document.activeElement)) ev.target.closest('.cond').querySelector('.cond-sugestoes').hidden = true; }, 120); });
+      $('f-conds').addEventListener('input', ev => { if (ev.target.matches('[data-campo="val"]')) mostrarValores(ev.target.closest('.cond'), true); });
+      $('f-conds').addEventListener('keydown', ev => { if (ev.key === 'Escape' && ev.target.matches('[data-campo="val"]')) { ev.stopPropagation(); fecharValores(); } });
+      $('f-conds').addEventListener('change', ev => { if (ev.target.matches('[data-campo="col"]')) campo(ev.target.closest('.cond'), 'val').value = ''; });
       $('modal-corpo').querySelectorAll('[data-aba]').forEach(b => b.addEventListener('click', () => {
         if (b.dataset.aba === 'avancado' && aba === 'basico') { try { const e = montar(); if (e && !$('f-expr').value.trim()) $('f-expr').value = 'each ' + e; } catch { /* formulário incompleto: começa vazio */ } }
+        if (b.dataset.aba === 'basico' && aba === 'avancado') {
+          const conds = M.condicoesDeExpr($('f-expr').value.trim());
+          if ($('f-expr').value.trim() && !conds) { $('f-res').className = 'resultado ruim'; $('f-res').textContent = 'Esta condição em M não cabe no modo Básico (tem parênteses no meio ou funções diferentes). Continue no Avançado.'; return; }
+          if (conds) $('f-conds').innerHTML = conds.map((cd, i) => htmlCondicao(cd, i === 0)).join('');
+        }
         aba = b.dataset.aba;
         $('modal-corpo').querySelectorAll('[data-aba]').forEach(x => x.classList.toggle('on', x === b));
         $('aba-basico').hidden = aba !== 'basico'; $('aba-avancado').hidden = aba !== 'avancado';
@@ -477,11 +511,17 @@ function janelaFiltrar(pre) {
       atualizar();
     },
     aoConfirmar() {
-      const expr = ui.montarFiltro();
+      let expr;
+      try { expr = ui.montarFiltro(); } catch (e) { return e.message; }
       if (!expr) return 'Escreva a condição do filtro.';
       M.analisar(expr.replace(/^each\s+/, ''));
-      if ($('f-res').classList.contains('ruim')) return $('f-res').textContent;
-      adicionarEtapa({ tipo: 'filtrar', expr: expr.replace(/^each\s+/, '') });
+      if ($('f-res').classList.contains('ruim') && !/^Ficam/.test($('f-res').textContent)) return $('f-res').textContent;
+      const nova = expr.replace(/^each\s+/, '');
+      if (!editando) return adicionarEtapa({ tipo: 'filtrar', expr: nova });
+      c.etapas[idx] = { ...c.etapas[idx], expr: nova };
+      ui.msgCelula = ''; salvar(); render();
+      const falha = M.executar(c).erro;
+      aviso(falha ? `Filtro "${c.etapas[idx].nome}" salvo, mas a etapa "${falha.etapa}" ficou com erro.` : `Filtro "${c.etapas[idx].nome}" atualizado.`, falha ? 'erro' : 'ok');
     },
   });
 }
@@ -652,6 +692,7 @@ document.addEventListener('click', ev => {
   if (!alvo.closest('.menu-col') && !alvo.closest('[data-coluna]')) fecharMenuColuna();
   const f = alvo.closest('[data-ferr]'); if (f && !f.disabled) return ferramenta(f.dataset.ferr);
   const x1 = alvo.closest('[data-excluir-consulta]'); if (x1) { ev.stopPropagation(); return excluirConsulta(x1.dataset.excluirConsulta); }
+  const ed = alvo.closest('[data-editar-etapa]'); if (ed) { ev.stopPropagation(); const c = atual(); const i = +ed.dataset.editarEtapa; ui.editandoFormula = false; ui.etapaSel = i === c.etapas.length - 1 ? null : i; render(); return janelaFiltrar(); }
   const x2 = alvo.closest('[data-excluir-etapa]'); if (x2) { ev.stopPropagation(); return excluirEtapa(+x2.dataset.excluirEtapa); }
   const lc = alvo.closest('[data-consulta]'); if (lc) { ui.editandoFormula = false; ui.editandoCodigo = false; ui.sel = lc.dataset.consulta; ui.etapaSel = null; ui.msgCelula = ''; salvar(); return render(); }
   const le = alvo.closest('[data-etapa]'); if (le) { ui.editandoFormula = false; const c = atual(); const i = +le.dataset.etapa; ui.etapaSel = i === c.etapas.length - 1 ? null : i; ui.msgCelula = ''; return render(); }

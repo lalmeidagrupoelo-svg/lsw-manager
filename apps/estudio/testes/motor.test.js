@@ -145,4 +145,17 @@ teste('E2: barra de fórmula troca uma etapa', () => {
   assert.deepStrictEqual(dados, { tipo: 'filtrar', expr: '[CANAL] = "CHAT"' });
 });
 
+teste('filtro: formulário → M → formulário volta igual', () => {
+  const conds = [
+    { junta: null, coluna: 'OPERAÇÃO', operador: 'diferente', valor: 'SAC' },
+    { junta: 'and', coluna: 'CANAL', operador: 'naoVazio', valor: '' },
+    { junta: 'or', coluna: 'DATA', operador: 'maiorIgual', valor: '05/11/2026' },
+  ];
+  const tipos = { OPERAÇÃO: 'texto', CANAL: 'texto', DATA: 'data' };
+  const expr = M.juntarCondicoes(conds.map(c => ({ junta: c.junta, expr: M.exprCondicao(c.coluna, c.operador, c.valor, tipos[c.coluna]) })));
+  assert.strictEqual(expr, '([OPERAÇÃO] <> "SAC" and [CANAL] <> null and [CANAL] <> "") or [DATA] >= #date(2026, 11, 5)');
+  assert.deepStrictEqual(M.condicoesDeExpr(expr), conds);
+  assert.strictEqual(M.condicoesDeExpr('[A] = 1 and ([B] = 2 or [C] = 3)'), null, 'parênteses no meio não cabem no formulário');
+});
+
 console.log(`\n${ok} testes passaram.`);
