@@ -530,7 +530,7 @@ Premissas:
 - [ ] F2 — gerador de dados fictícios
 - [ ] F3 — Manager: usuários (escolher itens da 5.2), configurações, menu e tela inicial
 - [ ] F4 — Controle de Quadro
-- [ ] F5 — Estúdio com aba Medidas
+- [ ] F5 — Estúdio (prioridade): E1 Transformar dados ✅ 12/11/2026 · E2 editor de M · E3 mesclar/acrescentar/agrupar · E4 relacionamentos · E5 central de funções · E6 leitor de fórmulas · Medidas e Relatórios (detalhe em `apps/estudio/CLAUDE.md`)
 - [ ] F6 — Painel de Dashboards e relatório de Ociosidade e Rigidez
 - [ ] F7 — Tickets
 - [ ] F8 — Intrahora
@@ -546,6 +546,7 @@ Premissas:
 ## 18. Histórico
 
 - 11/11/2026 — v1: plano criado; endereço lsw-manager.vercel.app; dados fictícios obrigatórios; conta plangrupoelo fora do projeto.
+- 12/11/2026 — Estúdio E1 entregue em `apps/estudio/`: editor de consultas estilo Power Query (6 ferramentas, etapas aplicadas, código M gerado, qualidade da coluna), motor M em JavaScript com testes, dados fictícios, paleta Proativa.
 - 12/11/2026 — prioridade passa a ser o **Estúdio** (editor de consultas no estilo Power Query com linguagem M, relacionamentos entre tabelas, central de funções e, depois, leitor de fórmulas). Banco: **Neon**, integrado só quando as bases fictícias subirem. Acesso de clientes registrado como F16. Skill `paleta-proativa` criada em `.claude/skills/`.
 - 11/11/2026 — v2: repositório `lsw-manager` criado; separação em 8 módulos independentes acessados pelo Manager via API e rotas; configuração de usuários melhorada; fonte de 1 a 15 (8 = padrão); pastas 04 e 05 liberadas como ideia, com dados fictícios.
 

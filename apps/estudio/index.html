@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Estúdio · LSW Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="./css/tema.css">
+  <link rel="stylesheet" href="./css/estudio.css">
+</head>
+<body>
+<!-- =====================================================================
+     ESTÚDIO · Transformar dados (E1)
+     1. Menu lateral do módulo   2. Topo   3. Faixa de ferramentas
+     4. Editor: Consultas | fórmula + grade | Etapas aplicadas
+     5. Código M   6. Janela (modal) e avisos
+     Toda a lógica fica em js/estudio.js; o motor do M em js/m-motor.js.
+     ===================================================================== -->
+<div class="app">
+
+  <!-- 1. MENU LATERAL -->
+  <aside class="lateral" aria-label="Menu do Estúdio">
+    <div class="marca"><i>P</i><div>Estúdio<small>LSW Manager</small></div></div>
+    <div class="nav-grupo">Dados</div>
+    <button class="nav-item on" type="button">Transformar dados</button>
+    <button class="nav-item" type="button" disabled title="Próxima etapa (E4)">Modelo e relacionamentos <em>E4</em></button>
+    <div class="nav-grupo">Análise</div>
+    <button class="nav-item" type="button" disabled title="Vem do Estúdio atual">Relatórios <em>em breve</em></button>
+    <button class="nav-item" type="button" disabled title="Vem do Estúdio atual">Medidas DAX <em>em breve</em></button>
+    <div class="nav-grupo">Ajuda</div>
+    <button class="nav-item" type="button" disabled title="Etapa E5">Funções M e DAX <em>E5</em></button>
+    <button class="nav-item" type="button" disabled title="Depois do Power Query">Leitor de fórmulas <em>E6</em></button>
+
+    <div class="lateral-rodape">
+      <label for="tema">Tema
+        <select id="tema">
+          <option value="automatico">Automático</option>
+          <option value="escuro">Escuro</option>
+          <option value="claro">Claro</option>
+        </select>
+      </label>
+      <div>
+        <span class="rotulo" style="font-size:var(--fs-11);color:var(--muted)">Tamanho da fonte</span>
+        <div class="fonte-nivel">
+          <button type="button" id="fonte-menos" aria-label="Diminuir fonte">−</button>
+          <span id="fonte-n">8</span>
+          <button type="button" id="fonte-mais" aria-label="Aumentar fonte">+</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="principal">
+    <!-- 2. TOPO -->
+    <header class="topo">
+      <h1>Transformar dados</h1>
+      <span class="salvo" id="status-salvo">Salvo no navegador</span>
+      <button class="btn peq" type="button" id="btn-zerar" title="Volta às consultas de exemplo">Zerar dados</button>
+    </header>
+
+    <!-- 3. FAIXA DE FERRAMENTAS -->
+    <div class="faixa" role="toolbar" aria-label="Ferramentas">
+      <div class="faixa-grupo"><div>
+        <button class="ferr principal-acao" type="button" data-ferr="nova"><b>+</b>Nova consulta</button>
+      </div><span>Consulta</span></div>
+      <div class="faixa-grupo"><div>
+        <button class="ferr" type="button" data-ferr="escolher" data-precisa-tabela><b>☰✓</b>Escolher colunas</button>
+        <button class="ferr" type="button" data-ferr="remover" data-precisa-tabela><b>☰✕</b>Remover colunas</button>
+      </div><span>Gerenciar colunas</span></div>
+      <div class="faixa-grupo"><div>
+        <button class="ferr" type="button" data-ferr="filtrar" data-precisa-tabela><b>▽</b>Filtrar linhas</button>
+      </div><span>Reduzir linhas</span></div>
+      <div class="faixa-grupo"><div>
+        <button class="ferr" type="button" data-ferr="tipos" data-precisa-tabela><b>1.2</b>Tipo de dados</button>
+        <button class="ferr" type="button" data-ferr="renomear" data-precisa-tabela><b>Aa</b>Renomear</button>
+      </div><span>Transformar</span></div>
+      <div class="faixa-grupo"><div>
+        <button class="ferr" type="button" data-ferr="adicionar" data-precisa-tabela><b>fx</b>Coluna personalizada</button>
+      </div><span>Adicionar coluna</span></div>
+      <div class="faixa-grupo"><div>
+        <button class="ferr" type="button" data-ferr="codigo" id="ferr-codigo"><b>M</b>Código M</button>
+      </div><span>Exibir</span></div>
+    </div>
+
+    <!-- 4. EDITOR -->
+    <div class="editor">
+      <section class="painel painel-consultas" aria-label="Consultas">
+        <h2 id="titulo-consultas">Consultas</h2>
+        <ul class="lista" id="lista-consultas"></ul>
+        <button class="btn-novo" type="button" data-ferr="nova">+ Nova consulta</button>
+      </section>
+
+      <section class="centro" aria-label="Dados">
+        <div class="formula"><span class="fx">fx</span><code id="formula"></code></div>
+        <div class="grade-area" id="grade-area"></div>
+        <div class="rodape-grade" id="rodape-grade"></div>
+      </section>
+
+      <section class="painel painel-etapas" aria-label="Propriedades e etapas">
+        <h2>Propriedades</h2>
+        <div class="propriedades">
+          <label for="nome-consulta">Nome</label>
+          <input type="text" id="nome-consulta" autocomplete="off">
+        </div>
+        <h2>Etapas aplicadas</h2>
+        <ul class="lista" id="lista-etapas"></ul>
+        <p class="dica-etapa">Clique numa etapa para ver os dados <b>naquele ponto</b>. Uma ferramenta usada agora entra logo depois da etapa selecionada.</p>
+      </section>
+    </div>
+
+    <!-- 5. CÓDIGO M -->
+    <section class="codigo" id="painel-codigo" hidden aria-label="Código M">
+      <header>
+        <h2>Código M da consulta</h2>
+        <span>Escrito sozinho a cada clique. A edição direta chega na etapa E2.</span>
+        <div class="acoes">
+          <button class="btn peq" type="button" id="btn-copiar">Copiar</button>
+          <button class="btn peq" type="button" data-ferr="codigo">Fechar</button>
+        </div>
+      </header>
+      <pre id="codigo-m"></pre>
+    </section>
+  </main>
+</div>
+
+<!-- 6. JANELA (modal) e AVISOS -->
+<div class="modal-fundo" id="modal" hidden>
+  <div class="modal" id="modal-caixa" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+    <header><h2 id="modal-titulo"></h2><button class="fechar" type="button" id="modal-x" aria-label="Fechar">×</button></header>
+    <div class="corpo" id="modal-corpo"></div>
+    <footer>
+      <span class="msg" id="modal-msg" role="alert"></span>
+      <button class="btn" type="button" id="modal-cancelar">Cancelar</button>
+      <button class="btn prim" type="button" id="modal-ok">Aplicar</button>
+    </footer>
+  </div>
+</div>
+<div class="avisos" id="avisos" aria-live="polite"></div>
+
+<script src="./dados-demo/exemplos.js"></script>
+<script src="./js/m-motor.js"></script>
+<script src="./js/armazenamento.js"></script>
+<script src="./js/estudio.js"></script>
+</body>
+</html>

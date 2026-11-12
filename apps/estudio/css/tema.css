@@ -1,0 +1,102 @@
+/* Tema do Estúdio = tokens da skill paleta-proativa (.claude/skills/paleta-proativa/tokens.css)
+   + escala de fonte de 1 a 15 (nível 8 = 0,90). Quando a frente F1 criar o compartilhado/lsw-tema.css,
+   este arquivo passa a importar de lá. Não escreva cores soltas: use os tokens. */
+:root {
+  --bg: #F1F5F9;
+  --surface: #FFFFFF;
+  --surface-2: #F8FAFC;
+  --surface-3: #E3EBF5;
+  --border: #CBD5E1;
+  --border-strong: #94A3B8;
+  --text: #0F172A;
+  --text-2: #475569;
+  --muted: #64748B;
+  --accent: #FE9007;
+  --accent-2: #E07B00;
+  --accent-soft: rgba(254, 144, 7, .12);
+  --on-accent: #0F172A;
+  --link: #9A4A06;
+
+  --ok: #166534;      --ok-bg: #DCFCE7;
+  --warn: #854D0E;    --warn-bg: #FEF9C3;
+  --bad: #9F1239;     --bad-bg: #FFE4E6;
+  --info: #075985;    --info-bg: #E0F2FE;
+
+  --serie-1: #0284C7; --serie-2: #0D9488; --serie-3: #FE9007;
+  --serie-4: #E11D48; --serie-5: #65A30D; --serie-6: #64748B;
+
+  --marca-degrade: linear-gradient(160deg, #FFB12B, #FE9007);
+  --f-titulo: 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif;
+  --f-texto: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0B1224;
+    --surface: #111A2E;
+    --surface-2: #18233B;
+    --surface-3: #1F2C47;
+    --border: #26334D;
+    --border-strong: #3A4A66;
+    --text: #F1F5F9;
+    --text-2: #94A3B8;
+    --muted: #7A89A0;
+    --accent: #FFB12B;
+    --accent-2: #FE9007;
+    --accent-soft: rgba(255, 177, 43, .14);
+    --on-accent: #0B1224;
+    --link: #FFC35C;
+
+    --ok: #4ADE80;   --ok-bg: rgba(74, 222, 128, .14);
+    --warn: #FACC15; --warn-bg: rgba(250, 204, 21, .14);
+    --bad: #FB7185;  --bad-bg: rgba(251, 113, 133, .14);
+    --info: #38BDF8; --info-bg: rgba(56, 189, 248, .14);
+
+    --serie-1: #38BDF8; --serie-2: #2DD4BF; --serie-3: #FFB12B;
+    --serie-4: #FB7185; --serie-5: #A3E635; --serie-6: #94A3B8;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0B1224;
+  --surface: #111A2E;
+  --surface-2: #18233B;
+  --surface-3: #1F2C47;
+  --border: #26334D;
+  --border-strong: #3A4A66;
+  --text: #F1F5F9;
+  --text-2: #94A3B8;
+  --muted: #7A89A0;
+  --accent: #FFB12B;
+  --accent-2: #FE9007;
+  --accent-soft: rgba(255, 177, 43, .14);
+  --on-accent: #0B1224;
+  --link: #FFC35C;
+
+  --ok: #4ADE80;   --ok-bg: rgba(74, 222, 128, .14);
+  --warn: #FACC15; --warn-bg: rgba(250, 204, 21, .14);
+  --bad: #FB7185;  --bad-bg: rgba(251, 113, 133, .14);
+  --info: #38BDF8; --info-bg: rgba(56, 189, 248, .14);
+
+  --serie-1: #38BDF8; --serie-2: #2DD4BF; --serie-3: #FFB12B;
+  --serie-4: #FB7185; --serie-5: #A3E635; --serie-6: #94A3B8;
+  color-scheme: dark;
+}
+
+/* Escala de fonte (Configurações › Aparência, nível 1 a 15). O JS grava --escala-fonte no <html>. */
+:root {
+  --escala-fonte: .9;
+  --fs-10: calc(10px * var(--escala-fonte));
+  --fs-11: calc(11px * var(--escala-fonte));
+  --fs-12: calc(12px * var(--escala-fonte));
+  --fs-13: calc(13px * var(--escala-fonte));
+  --fs-14: calc(14px * var(--escala-fonte));
+  --fs-15: calc(15px * var(--escala-fonte));
+  --fs-16: calc(16px * var(--escala-fonte));
+  --fs-18: calc(18px * var(--escala-fonte));
+  --fs-22: calc(22px * var(--escala-fonte));
+  --raio: 8px;
+}
