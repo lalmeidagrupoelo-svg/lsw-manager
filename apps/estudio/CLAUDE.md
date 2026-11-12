@@ -62,7 +62,7 @@ Ferramenta para **montar bases e relatórios** no estilo Power BI, dentro do nav
 - [x] **E1** — Transformar dados: 6 ferramentas, etapas aplicadas, prévia por etapa, qualidade da coluna, código M só leitura (12/11/2026)
 - [x] **E2** — Editor de M (12/11/2026; filtro revisado em 13/11: editar filtro existente, lista de valores própria, condição sem valor bloqueia; um conector por nível + grupos (parênteses) + "Lendo como" em português): barra `fx` editável (Enter aplica, Esc cancela) e Editor avançado (`let … in`, Ctrl+Enter aplica). `lerM`/`lerLinhaEtapa` no motor fazem o caminho de volta do `gerarM`; cada etapa precisa usar a etapa logo acima; funções fora do catálogo dão mensagem com a lista aceita. Filtro com várias condições (+/×) e E/OU antes de cada uma.
 - [ ] Editar etapa pela janela da ferramenta (engrenagem), com o formulário já preenchido
-- [x] **E3** — Mesclar (6 junções, várias chaves, prévia de % de correspondência), Acrescentar e Agrupar (13/11/2026). Importação já cria a etapa Espaços Removidos.
+- [x] **E3** — Mesclar (6 junções, várias chaves, prévia de % de correspondência; colunas a trazer com nome final editável, prefixo opcional desligado, ✎ na etapa Expandido para mudar depois), Acrescentar e Agrupar (13/11/2026). Importação já cria a etapa Espaços Removidos.
 - [ ] **E4** — Modelo e relacionamentos (1:N, chave única, % de correspondência; visuais e DAX filtram pelas ligações)
 - [ ] **E5** — Central de funções M e DAX
 - [ ] **E6** — Leitor de fórmulas

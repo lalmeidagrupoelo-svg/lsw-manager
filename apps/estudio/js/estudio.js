@@ -107,7 +107,7 @@ function renderEtapas() {
   $('lista-etapas').innerHTML = c.etapas.map((e, i) => `
     <li class="${i === sel ? 'on' : ''}${i > sel ? ' depois' : ''}${falha && falha.indice === i ? ' com-erro' : ''}" data-etapa="${i}" title="${esc(M.ETAPAS[e.tipo].descricao)}">
       <span class="ico">${falha && falha.indice === i ? '⚠' : i + 1}</span><span class="nome">${esc(e.nome)}</span>
-      ${e.tipo === 'filtrar' ? `<button class="x editar" type="button" data-editar-etapa="${i}" aria-label="Editar o filtro ${esc(e.nome)}" title="Editar este filtro">✎</button>` : ''}
+      ${e.tipo === 'filtrar' || e.tipo === 'expandir' ? `<button class="x editar" type="button" data-editar-etapa="${i}" aria-label="Editar a etapa ${esc(e.nome)}" title="${e.tipo === 'filtrar' ? 'Editar este filtro' : 'Escolher colunas e nomes'}">✎</button>` : ''}
       ${i > 0 ? `<button class="x" type="button" data-excluir-etapa="${i}" aria-label="Excluir etapa ${esc(e.nome)}">×</button>` : ''}
     </li>`).join('');
 }
@@ -692,6 +692,42 @@ function outrasConsultas(c) {
   return ui.consultas.filter(q => q.id !== c.id && !dependem.has(q.nome));
 }
 
+// Bloco "colunas que vêm da outra consulta": marcar, nome final editável, prefixo opcional (desligado)
+function htmlColunasExpandir(origem, { marcadas, nomes, prefixo }) {
+  return `<div class="campo">
+    <div class="exp-topo"><span class="rotulo">Colunas que vêm da outra consulta</span>
+      <span class="acoes"><button class="btn peq" type="button" data-exp-todas>Marcar todas</button><button class="btn peq" type="button" data-exp-nenhuma>Desmarcar todas</button></span></div>
+    <label class="ajuda exp-prefixo"><input type="checkbox" id="exp-prefixo" ${prefixo ? 'checked' : ''}> Pôr o nome da consulta na frente (ex.: <span class="mono">quadro.NOME</span>)</label>
+    <div class="exp-tabela"><table class="tabela-form" id="exp-cols"><thead><tr><th style="width:36px"></th><th>Coluna na outra consulta</th><th>Nome na tabela final</th></tr></thead><tbody>
+      ${origem.map(x => { const ok = marcadas.includes(x.nome); return `<tr data-col="${esc(x.nome)}" class="${ok ? '' : 'desligada'}"><td><input type="checkbox" ${ok ? 'checked' : ''} aria-label="Trazer ${esc(x.nome)}"></td><td>${esc(x.nome)} <small class="mono">${M.TIPOS[x.tipo].icone}</small></td><td><input type="text" value="${esc(nomes[x.nome] || x.nome)}" ${ok ? '' : 'disabled'} aria-label="Nome final de ${esc(x.nome)}" ${nomes[x.nome] && nomes[x.nome] !== x.nome && !prefixo ? 'data-mexido="1"' : ''}></td></tr>`; }).join('')}
+    </tbody></table></div>
+  </div>`;
+}
+// Liga os botões do bloco. "aoMudar" roda a cada mudança (para refazer a prévia).
+function ligarColunasExpandir(nomeConsulta, aoMudar) {
+  const linhas = () => [...$('exp-cols').querySelectorAll('tbody tr')];
+  const sugerido = col => ($('exp-prefixo').checked ? `${nomeConsulta()}.${col}` : col);
+  const marcar = (tr, ok) => { tr.querySelector('input[type=checkbox]').checked = ok; tr.classList.toggle('desligada', !ok); tr.querySelector('input[type=text]').disabled = !ok; };
+  $('modal-corpo').querySelector('[data-exp-todas]').addEventListener('click', () => { linhas().forEach(tr => marcar(tr, true)); aoMudar(); });
+  $('modal-corpo').querySelector('[data-exp-nenhuma]').addEventListener('click', () => { linhas().forEach(tr => marcar(tr, false)); aoMudar(); });
+  $('exp-prefixo').addEventListener('change', () => { linhas().forEach(tr => { const i = tr.querySelector('input[type=text]'); if (!i.dataset.mexido) i.value = sugerido(tr.dataset.col); }); aoMudar(); });
+  $('exp-cols').addEventListener('change', ev => { if (ev.target.type === 'checkbox') { marcar(ev.target.closest('tr'), ev.target.checked); aoMudar(); } });
+  $('exp-cols').addEventListener('input', ev => { if (ev.target.type === 'text') { ev.target.dataset.mexido = '1'; aoMudar(); } });
+  return { refazerNomes: () => linhas().forEach(tr => { const i = tr.querySelector('input[type=text]'); if (!i.dataset.mexido) i.value = sugerido(tr.dataset.col); }) };
+}
+// Lê o bloco: { colunas, novos }. Confere nomes vazios e repetidos (entre si e com as colunas que já existem).
+function lerColunasExpandir(existentes) {
+  const marcadas = [...$('exp-cols').querySelectorAll('tbody tr')].filter(tr => tr.querySelector('input[type=checkbox]').checked);
+  $('exp-cols').querySelectorAll('tr.conflito').forEach(tr => tr.classList.remove('conflito'));
+  const colunas = marcadas.map(tr => tr.dataset.col);
+  const novos = marcadas.map(tr => tr.querySelector('input[type=text]').value.trim());
+  const vazio = novos.findIndex(n => !n);
+  if (vazio >= 0) { marcadas[vazio].classList.add('conflito'); throw new M.FalhaEtapa(`A coluna "${colunas[vazio]}" está sem nome final.`); }
+  const k = novos.findIndex((n, i) => existentes.includes(n) || novos.indexOf(n) !== i);
+  if (k >= 0) { marcadas[k].classList.add('conflito'); throw new M.FalhaEtapa(`O nome "${novos[k]}" já existe na tabela. Troque o nome final ou ligue o prefixo da consulta.`); }
+  return { colunas, novos };
+}
+
 // Mesclar consultas: liga esta consulta a outra pelas colunas-chave (como o PROCV, mas trazendo várias colunas)
 function janelaMesclar() {
   const c = atual(); const t = tabelaEntrada();
@@ -711,8 +747,7 @@ function janelaMesclar() {
         <div class="campo"><label for="m-juncao">Tipo de junção</label><select id="m-juncao">${opcoesJ}</select></div>
         <p class="ajuda" id="m-juncao-ajuda" style="align-self:end"></p>
       </div>
-      <div class="campo"><span class="rotulo">Colunas que vêm da outra consulta</span><div class="checks" id="m-cols" style="max-height:180px"></div>
-        <label class="ajuda" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="m-prefixo" checked> Usar o nome da consulta como prefixo (ex.: quadro.NOME), para não confundir com colunas desta</label></div>
+      <div id="m-cols"></div>
       <div class="resultado" id="m-res">—</div>`,
     aoAbrir() {
       const outraTab = () => { const q = ui.consultas.find(x => x.nome === $('m-outra').value); const r = exec(q); return r.tabela; };
@@ -723,7 +758,10 @@ function janelaMesclar() {
         const comum = t.colunas.map(x => x.nome).filter(n => td.colunas.some(y => y.nome === n));
         const chave = comum.find(n => /MATRICULA|CODIGO|CÓDIGO|ID/i.test(n)) || comum[0] || t.colunas[0].nome;
         $('m-pares').innerHTML = parHtml(chave, td.colunas.some(y => y.nome === chave) ? chave : td.colunas[0].nome, td);
-        $('m-cols').innerHTML = td.colunas.map(x => `<label><input type="checkbox" value="${esc(x.nome)}" ${x.nome === chave ? '' : 'checked'}> ${esc(x.nome)} <small>${M.TIPOS[x.tipo].icone}</small></label>`).join('');
+        // já vem desmarcada a chave e qualquer coluna com nome igual a uma desta consulta (evita repetir)
+        const marcadas = td.colunas.map(x => x.nome).filter(n => n !== chave && !t.colunas.some(y => y.nome === n));
+        $('m-cols').innerHTML = htmlColunasExpandir(td.colunas, { marcadas, nomes: {}, prefixo: false });
+        ligarColunasExpandir(() => $('m-outra').value, atualizar);
         atualizar();
       };
       const pares = () => [...$('m-pares').querySelectorAll('.par-chave')].map(el => [el.querySelector('[data-lado=esq]').value, el.querySelector('[data-lado=dir]').value]);
@@ -731,8 +769,7 @@ function janelaMesclar() {
         const nomeOutra = $('m-outra').value; const ps = pares();
         const usadas = new Set(t.colunas.map(x => x.nome));
         let coluna = nomeOutra; let n = 2; while (usadas.has(coluna)) coluna = `${nomeOutra} (${n++})`;
-        const cols = [...$('m-cols').querySelectorAll('input:checked')].map(x => x.value);
-        const novos = cols.map(x => ($('m-prefixo').checked ? `${nomeOutra}.${x}` : x));
+        const { colunas: cols, novos } = lerColunasExpandir(t.colunas.map(x => x.nome));
         const lista = [{ tipo: 'mesclar', chaves: ps.map(p => p[0]), consulta: nomeOutra, chavesOutra: ps.map(p => p[1]), coluna, juncao: $('m-juncao').value }];
         if (cols.length) lista.push({ tipo: 'expandir', nomeBase: `${coluna} Expandido`, coluna, colunas: cols, novos });
         return lista;
@@ -760,13 +797,15 @@ function janelaMesclar() {
       $('m-outra').addEventListener('change', montarTela);
       $('m-mais-chave').addEventListener('click', () => { $('m-pares').insertAdjacentHTML('beforeend', parHtml(t.colunas[0].nome, null, outraTab())); atualizar(); });
       $('m-pares').addEventListener('click', ev => { const x = ev.target.closest('[data-remover-par]'); if (x) { x.closest('.par-chave').remove(); atualizar(); } });
-      $('modal-corpo').addEventListener('change', ev => { if (ev.target.id !== 'm-outra') atualizar(); });
+      $('modal-corpo').addEventListener('change', ev => { if (ev.target.id !== 'm-outra' && !ev.target.closest('#m-cols')) atualizar(); });
       ui.etapasMesclar = etapas;
       montarTela();
     },
     aoConfirmar() {
       if ($('m-res').classList.contains('ruim') && !/acharam par|Nenhuma linha combinou/.test($('m-res').textContent)) return $('m-res').textContent;
-      adicionarEtapa(ui.etapasMesclar());
+      const lista = ui.etapasMesclar();
+      if (lista.length === 1) aviso('Nenhuma coluna marcada: a coluna de tabelas ficou na consulta. Use ✎ na etapa para escolher depois, ou "Expandir".', 'ok', 5000);
+      adicionarEtapa(lista);
     },
   });
 }
@@ -863,6 +902,35 @@ function janelaAgrupar(pre) {
   });
 }
 
+// Editar a etapa "Expandido": muda as colunas e os nomes sem refazer a mesclagem
+function janelaEditarExpandir(i) {
+  const c = atual(); const e = c.etapas[i];
+  const antes = exec(c, i - 1);
+  if (!antes.tabela) return aviso('A etapa anterior está com erro; corrija-a antes.', 'erro');
+  const col = antes.tabela.colunas.find(x => x.nome === e.coluna);
+  if (!col || !col.origem) return aviso(`A coluna de tabelas "${e.coluna}" não existe mais na etapa anterior.`, 'erro');
+  const existentes = antes.tabela.colunas.map(x => x.nome).filter(n => n !== e.coluna);
+  const prefixo = e.novos.length > 0 && e.novos.every((n, k) => n === `${e.coluna}.${e.colunas[k]}`);
+  abrirJanela({
+    titulo: `Editar colunas · ${e.nome}`, ok: 'Salvar', largo: true,
+    corpo: `<p class="ajuda">Escolha quais colunas de <b>${esc(e.coluna)}</b> entram na tabela e com que nome (no M: Table.ExpandTableColumn).</p>
+      ${htmlColunasExpandir(col.origem, { marcadas: e.colunas, nomes: Object.fromEntries(e.colunas.map((x, k) => [x, e.novos[k]])), prefixo })}
+      <div class="resultado" id="x-res"></div>`,
+    aoAbrir() {
+      const conferir = () => { try { const r = lerColunasExpandir(existentes); $('x-res').className = 'resultado ok'; $('x-res').textContent = `${r.colunas.length} coluna(s) entram na tabela.`; } catch (er) { $('x-res').className = 'resultado ruim'; $('x-res').textContent = er.message; } };
+      ligarColunasExpandir(() => e.coluna, conferir); conferir();
+    },
+    aoConfirmar() {
+      const r = lerColunasExpandir(existentes);
+      if (!r.colunas.length) return 'Marque pelo menos uma coluna. Para não trazer nenhuma, exclua a etapa no ×.';
+      c.etapas[i] = { ...e, colunas: r.colunas, novos: r.novos };
+      salvar(); render();
+      const falha = exec(c).erro;
+      aviso(falha ? `Etapa "${e.nome}" salva, mas a etapa "${falha.etapa}" ficou com erro (ela usava uma coluna que mudou de nome?).` : `Etapa "${e.nome}" atualizada.`, falha ? 'erro' : 'ok', 5000);
+    },
+  });
+}
+
 // Janela simples de confirmação (o navegador do artefato não mostra confirm())
 function confirmar(titulo, texto, ok, acao) {
   abrirJanela({ titulo, ok, corpo: `<p style="margin:0">${texto}</p>`, aoConfirmar: () => { acao(); } });
@@ -934,7 +1002,7 @@ document.addEventListener('click', ev => {
   if (!alvo.closest('.menu-col') && !alvo.closest('[data-coluna]')) fecharMenuColuna();
   const f = alvo.closest('[data-ferr]'); if (f && !f.disabled) return ferramenta(f.dataset.ferr);
   const x1 = alvo.closest('[data-excluir-consulta]'); if (x1) { ev.stopPropagation(); return excluirConsulta(x1.dataset.excluirConsulta); }
-  const ed = alvo.closest('[data-editar-etapa]'); if (ed) { ev.stopPropagation(); const c = atual(); const i = +ed.dataset.editarEtapa; ui.editandoFormula = false; ui.etapaSel = i === c.etapas.length - 1 ? null : i; render(); return janelaFiltrar(); }
+  const ed = alvo.closest('[data-editar-etapa]'); if (ed) { ev.stopPropagation(); const c = atual(); const i = +ed.dataset.editarEtapa; ui.editandoFormula = false; ui.etapaSel = i === c.etapas.length - 1 ? null : i; render(); return c.etapas[i].tipo === 'expandir' ? janelaEditarExpandir(i) : janelaFiltrar(); }
   const x2 = alvo.closest('[data-excluir-etapa]'); if (x2) { ev.stopPropagation(); return excluirEtapa(+x2.dataset.excluirEtapa); }
   const lc = alvo.closest('[data-consulta]'); if (lc) { ui.editandoFormula = false; ui.editandoCodigo = false; ui.sel = lc.dataset.consulta; ui.etapaSel = null; ui.msgCelula = ''; salvar(); return render(); }
   const le = alvo.closest('[data-etapa]'); if (le) { ui.editandoFormula = false; const c = atual(); const i = +le.dataset.etapa; ui.etapaSel = i === c.etapas.length - 1 ? null : i; ui.msgCelula = ''; return render(); }

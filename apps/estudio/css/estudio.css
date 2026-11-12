@@ -232,6 +232,15 @@ select.cond-junta { color: var(--link); padding: 7px 4px; }
 .grade td.aninhada { color: var(--link); font-style: italic; font-weight: 600; }
 .grade td.aninhada small { font: 500 var(--fs-10) var(--f-mono); color: var(--muted); font-style: normal; }
 
+/* colunas a expandir (Mesclar) */
+.exp-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.exp-prefixo { display: flex; gap: 6px; align-items: center; }
+.exp-tabela { max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
+.exp-tabela thead th { position: sticky; top: 0; background: var(--surface); }
+#exp-cols tr.desligada td:nth-child(2) { color: var(--muted); }
+#exp-cols tr.desligada input[type=text] { opacity: .45; }
+#exp-cols tr.conflito input[type=text] { border-color: var(--bad); background: var(--bad-bg); }
+
 /* coluna personalizada: 3 partes */
 .personalizada { display: grid; grid-template-columns: 180px minmax(0, 1fr) 240px; gap: 14px; min-height: 0; align-items: start; }
 .personalizada > .campo { align-content: start; }
