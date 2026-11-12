@@ -307,59 +307,78 @@ function janelaColunas(modo, pre) {
   });
 }
 
-// Filtrar linhas: modo básico (formulário) ou avançado (expressão M)
+// Filtrar linhas: lista de condições (+ acrescenta, × remove, E/OU antes de cada uma) ou expressão M
+// As condições são lidas de cima para baixo: c1 E c2 OU c3 = (c1 E c2) OU c3.
+function juntarCondicoes(conds) {
+  let expr = '', opAnterior = null;
+  conds.forEach(({ junta, expr: e }, i) => {
+    if (i === 0) { expr = e; return; }
+    if (opAnterior && opAnterior !== junta) expr = `(${expr})`;
+    expr = `${expr} ${junta} ${e}`;
+    opAnterior = junta;
+  });
+  return expr;
+}
 function janelaFiltrar(pre) {
   const t = tabelaEntrada();
   const ops = Object.entries(M.OPERADORES).map(([k, o]) => `<option value="${k}">${o.rotulo}</option>`).join('');
+  const tipoDe = nome => (t.colunas.find(c => c.nome === nome) || {}).tipo;
   const valoresDe = nome => {
     const k = t.colunas.findIndex(c => c.nome === nome); if (k < 0) return [];
     const vistos = new Set();
     for (const l of t.linhas) { const v = l[k]; if (v !== null && !M.ehErro(v) && v !== '') vistos.add(M.formatar(v, t.colunas[k].tipo)); if (vistos.size >= 60) break; }
     return [...vistos].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
   };
-  const linhaCond = n => `<div class="linha-form">
-      <select id="f-col${n}" aria-label="Coluna">${n === 2 ? '<option value="">— sem segunda condição —</option>' : ''}${opcoesColunas(t, n === 1 ? pre : '')}</select>
-      <select id="f-op${n}" aria-label="Condição">${ops}</select>
-      <input type="text" id="f-val${n}" list="f-lista${n}" aria-label="Valor" autocomplete="off"><datalist id="f-lista${n}"></datalist>
+  let seq = 0;
+  const htmlCondicao = (col, primeira) => {
+    const n = ++seq;
+    return `<div class="cond" data-cond="${n}">
+      ${primeira ? '<span class="cond-junta cond-onde">Onde</span>' : `<select class="cond-junta" data-campo="junta" aria-label="Como juntar com a condição de cima"><option value="and">E</option><option value="or">OU</option></select>`}
+      <select data-campo="col" aria-label="Coluna">${opcoesColunas(t, col)}</select>
+      <select data-campo="op" aria-label="Condição">${ops}</select>
+      <input type="text" data-campo="val" list="f-lista${n}" aria-label="Valor" autocomplete="off"><datalist id="f-lista${n}"></datalist>
+      <button class="cond-x" type="button" data-remover-cond aria-label="Remover esta condição" title="Remover esta condição">×</button>
     </div>`;
+  };
   abrirJanela({
-    titulo: 'Filtrar linhas', largo: false,
+    titulo: 'Filtrar linhas', largo: true,
     corpo: `<div class="abas" role="tablist"><button type="button" class="on" data-aba="basico">Básico</button><button type="button" data-aba="avancado">Avançado (M)</button></div>
-      <div id="aba-basico" class="campo" style="gap:10px">
+      <div id="aba-basico" class="campo" style="gap:8px">
         <span class="rotulo">Manter as linhas em que</span>
-        ${linhaCond(1)}
-        <div><select id="f-junta" aria-label="Juntar condições" style="width:auto"><option value="and">E (as duas valem)</option><option value="or">OU (basta uma)</option></select></div>
-        ${linhaCond(2)}
+        <div id="f-conds" class="conds">${htmlCondicao(pre, true)}</div>
+        <div><button class="btn peq" type="button" id="f-mais">+ Adicionar condição</button></div>
+        <p class="ajuda">As condições são lidas de cima para baixo. <b>E</b>: as duas precisam valer. <b>OU</b>: basta uma valer. Misturando E e OU, o que está acima vira um bloco entre parênteses.</p>
       </div>
       <div id="aba-avancado" class="campo" hidden>
         <label for="f-expr">Condição em M</label>
         <textarea id="f-expr" spellcheck="false" placeholder='each [OPERAÇÃO] = "SAC" and [CHAMADAS] > 40'></textarea>
-        <p class="ajuda">Use [Coluna], = &lt;&gt; &gt; &lt; &gt;= &lt;=, and, or, not e funções como Text.Contains([CANAL], "VO") ou [DATA] &gt;= #date(2026, 11, 5).</p>
+        <p class="ajuda">Use [Coluna], = &lt;&gt; &gt; &lt; &gt;= &lt;=, and, or, not, parênteses e funções como Text.Contains([CANAL], "VO") ou [DATA] &gt;= #date(2026, 11, 5).</p>
       </div>
       <div class="resultado" id="f-res">—</div>`,
     aoAbrir() {
       let aba = 'basico';
-      const tipoDe = nome => (t.colunas.find(c => c.nome === nome) || {}).tipo;
+      const linhas = () => [...$('f-conds').querySelectorAll('.cond')];
+      const campo = (el, nome) => el.querySelector(`[data-campo="${nome}"]`);
       const montar = () => {
         if (aba === 'avancado') return $('f-expr').value.trim();
-        const cond = n => {
-          const col = $('f-col' + n).value; if (!col) return '';
-          const op = $('f-op' + n).value;
-          if (!M.OPERADORES[op].semValor && $('f-val' + n).value.trim() === '' && tipoDe(col) !== 'texto') throw new M.FalhaEtapa(`Preencha o valor da condição ${n}.`);
-          return M.exprCondicao(col, op, $('f-val' + n).value, tipoDe(col));
-        };
-        const a = cond(1), b = cond(2);
-        return b ? `${a} ${$('f-junta').value} ${b}` : a;
+        const conds = linhas().map((el, i) => {
+          const col = campo(el, 'col').value, op = campo(el, 'op').value, val = campo(el, 'val').value;
+          if (!M.OPERADORES[op].semValor && val.trim() === '' && tipoDe(col) !== 'texto') throw new M.FalhaEtapa(`Preencha o valor da condição ${i + 1}.`);
+          return { junta: i ? campo(el, 'junta').value : null, expr: M.exprCondicao(col, op, val, tipoDe(col)) };
+        });
+        return juntarCondicoes(conds);
       };
       const atualizar = () => {
-        [1, 2].forEach(n => {
-          const col = $('f-col' + n).value; const op = M.OPERADORES[$('f-op' + n).value];
-          $('f-val' + n).disabled = !col || op.semValor;
-          const tipo = tipoDe(col);
-          $('f-val' + n).placeholder = tipo === 'data' ? 'dd/mm/aaaa' : tipo === 'hora' ? 'hh:mm' : tipo === 'inteiro' || tipo === 'decimal' ? 'ex.: 40' : 'texto';
-          $('f-lista' + n).innerHTML = valoresDe(col).map(v => `<option value="${esc(v)}">`).join('');
+        const todas = linhas();
+        todas.forEach(el => {
+          const col = campo(el, 'col').value; const op = M.OPERADORES[campo(el, 'op').value];
+          const val = campo(el, 'val'); const tipo = tipoDe(col);
+          val.disabled = op.semValor;
+          val.placeholder = op.semValor ? '—' : tipo === 'data' ? 'dd/mm/aaaa' : tipo === 'hora' ? 'hh:mm' : tipo === 'inteiro' || tipo === 'decimal' ? 'ex.: 40' : 'texto';
+          const lista = el.querySelector('datalist');
+          if (lista.dataset.col !== col) { lista.dataset.col = col; lista.innerHTML = valoresDe(col).map(v => `<option value="${esc(v)}">`).join(''); }
+          el.querySelector('[data-remover-cond]').hidden = todas.length === 1;
         });
-        $('f-junta').parentElement.hidden = false;
         try {
           const expr = montar();
           if (!expr) { $('f-res').className = 'resultado'; $('f-res').textContent = 'Escreva a condição.'; return; }
@@ -372,6 +391,21 @@ function janelaFiltrar(pre) {
           $('f-res').innerHTML = `Ficam <b>${ficam.toLocaleString('pt-BR')}</b> de ${t.linhas.length.toLocaleString('pt-BR')} linhas.<br><span class="mono">Table.SelectRows(..., each ${esc(expr.replace(/^each\s+/, ''))})</span>`;
         } catch (e) { $('f-res').className = 'resultado ruim'; $('f-res').textContent = e.message; }
       };
+      $('f-mais').addEventListener('click', () => {
+        const ultima = linhas().pop();
+        $('f-conds').insertAdjacentHTML('beforeend', htmlCondicao(ultima ? campo(ultima, 'col').value : '', false));
+        const nova = linhas().pop();
+        if (linhas().length > 2) campo(nova, 'junta').value = campo(linhas()[linhas().length - 2], 'junta').value; // repete o E/OU da linha de cima
+        campo(nova, 'col').focus();
+        atualizar();
+      });
+      $('f-conds').addEventListener('click', ev => {
+        const x = ev.target.closest('[data-remover-cond]'); if (!x) return;
+        x.closest('.cond').remove();
+        const primeira = linhas()[0]; const j = campo(primeira, 'junta');
+        if (j) j.outerHTML = '<span class="cond-junta cond-onde">Onde</span>'; // a de cima não tem E/OU
+        atualizar();
+      });
       $('modal-corpo').querySelectorAll('[data-aba]').forEach(b => b.addEventListener('click', () => {
         if (b.dataset.aba === 'avancado' && aba === 'basico') { try { const e = montar(); if (e && !$('f-expr').value.trim()) $('f-expr').value = 'each ' + e; } catch { /* formulário incompleto: começa vazio */ } }
         aba = b.dataset.aba;
