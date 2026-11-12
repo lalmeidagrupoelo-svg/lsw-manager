@@ -257,6 +257,7 @@ function abrirMenuColuna(k, botao) {
     <hr><button type="button" data-acao-col="agrupar">Agrupar por esta coluna…</button>
     <button type="button" data-acao-col="adicionar">Coluna personalizada…</button>`;
   document.body.appendChild(menu);
+  ui.menuAbertoEm = Date.now();
   const r = botao.getBoundingClientRect();
   menu.style.left = Math.min(r.left, window.innerWidth - menu.offsetWidth - 8) + 'px';
   menu.style.top = Math.min(r.bottom + 2, window.innerHeight - menu.offsetHeight - 8) + 'px';
@@ -1010,7 +1011,8 @@ document.addEventListener('click', ev => {
   const col = alvo.closest('[data-coluna]'); if (col) return abrirMenuColuna(+col.dataset.coluna, col);
   const cel = alvo.closest('td.erro'); if (cel) { ui.msgCelula = cel.dataset.erro; return renderCentro(); }
 });
-$('grade-area').addEventListener('scroll', fecharMenuColuna);
+// a rolagem que o próprio clique provoca (cabeçalho meio escondido) não fecha o menu que acabou de abrir
+$('grade-area').addEventListener('scroll', () => { if (Date.now() - (ui.menuAbertoEm || 0) > 400) fecharMenuColuna(); });
 window.addEventListener('resize', fecharMenuColuna);
 $('modal-ok').addEventListener('click', confirmarJanela);
 $('modal-cancelar').addEventListener('click', fecharJanela);
