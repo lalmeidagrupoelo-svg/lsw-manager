@@ -81,9 +81,14 @@ button { cursor: pointer; }
 
 /* centro: barra de fórmula + grade */
 .centro { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
-.formula { display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface); min-height: 38px; }
-.formula .fx { font: italic 600 var(--fs-13) var(--f-mono); color: var(--muted); padding-top: 1px; }
-.formula code { font: var(--fs-12)/1.5 var(--f-mono); color: var(--text); white-space: pre-wrap; word-break: break-word; }
+.formula-wrap { border-bottom: 1px solid var(--border); background: var(--surface); }
+.formula { display: flex; align-items: flex-start; gap: 8px; padding: 6px 12px; min-height: 38px; }
+.formula .fx { font: italic 600 var(--fs-13) var(--f-mono); color: var(--muted); padding-top: 5px; }
+.formula textarea { flex: 1; min-width: 0; resize: none; overflow: hidden; border: 1px solid transparent; border-radius: 6px; background: transparent; padding: 4px 6px; font: var(--fs-12)/1.5 var(--f-mono); color: var(--text); cursor: text; }
+.formula textarea:hover { border-color: var(--border); }
+.formula textarea:focus { border-color: var(--accent); background: var(--surface-2); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+.formula-acoes { display: flex; gap: 4px; padding-top: 2px; }
+.formula-erro, .codigo-erro { margin: 0 12px 8px; padding: 7px 10px; border-radius: 6px; background: var(--bad-bg); color: var(--bad); font: var(--fs-12)/1.45 var(--f-mono); white-space: pre-wrap; }
 .grade-area { overflow: auto; min-height: 0; background: var(--bg); }
 table.grade { border-collapse: separate; border-spacing: 0; font-size: var(--fs-13); font-variant-numeric: tabular-nums; }
 .grade th, .grade td { border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 5px 10px; white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; background: var(--surface); }
@@ -116,7 +121,8 @@ table.grade { border-collapse: separate; border-spacing: 0; font-size: var(--fs-
 .acoes { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* painel de código M */
-.codigo { border-top: 1px solid var(--border); background: var(--surface); display: grid; grid-template-rows: auto minmax(0, 1fr); max-height: 34vh; }
+.codigo { border-top: 1px solid var(--border); background: var(--surface); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; max-height: 40vh; }
+.codigo textarea { margin: 0; border: 0; border-top: 2px solid var(--accent); padding: 10px 14px; min-height: 220px; resize: vertical; background: var(--surface-2); font: var(--fs-12)/1.6 var(--f-mono); color: var(--text); tab-size: 4; outline: none; }
 .codigo header { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
 .codigo header h2 { margin: 0; font: 600 var(--fs-13) var(--f-titulo); }
 .codigo header span { font-size: var(--fs-11); color: var(--muted); }

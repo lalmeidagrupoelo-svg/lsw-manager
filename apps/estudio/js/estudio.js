@@ -38,6 +38,8 @@ const ui = {
   sel: null,         // id da consulta aberta
   etapaSel: null,    // índice da etapa selecionada (null = a última)
   codigoAberto: false,
+  editandoCodigo: false, // Editor avançado aberto para edição
+  editandoFormula: false, // barra fx em edição
   msgCelula: '',     // mensagem do "Error" clicado na grade
   aoConfirmar: null, // função do botão principal da janela aberta
 };
@@ -111,7 +113,7 @@ function renderCentro() {
   const c = atual();
   const area = $('grade-area');
   if (!c) {
-    $('formula').textContent = '';
+    mostrarFormula('');
     area.innerHTML = `<div class="vazio-estado"><h3>Nenhuma consulta aberta</h3>
       <p>Uma consulta lê um arquivo e guarda cada tratamento como uma etapa, igual ao Power Query. Comece por um dos exemplos fictícios ou importe um CSV.</p>
       <div class="acoes"><button class="btn prim" type="button" data-ferr="nova">+ Nova consulta</button></div></div>`;
@@ -119,7 +121,7 @@ function renderCentro() {
     return;
   }
   const i = indiceEtapa();
-  $('formula').textContent = M.gerarMEtapa(c, i);
+  mostrarFormula(M.gerarMEtapa(c, i));
   const res = M.executar(c, i);
   if (res.erro) {
     area.innerHTML = `<div class="erro-etapa"><h3>A etapa “${esc(res.erro.etapa)}” não conseguiu rodar</h3>
@@ -156,7 +158,63 @@ function pintarM(codigo) {
 function renderCodigo() {
   $('painel-codigo').hidden = !ui.codigoAberto;
   const c = atual();
-  $('codigo-m').innerHTML = c && ui.codigoAberto ? pintarM(M.gerarM(c)) : '';
+  const editando = ui.editandoCodigo && !!c;
+  $('codigo-m').hidden = editando; $('codigo-edicao').hidden = !editando;
+  $('codigo-acoes-ver').hidden = editando; $('codigo-acoes-editar').hidden = !editando;
+  $('codigo-dica').textContent = editando
+    ? 'Mude o código e clique em Aplicar código: as etapas são refeitas a partir dele. Ctrl+Enter também aplica.'
+    : 'Escrito sozinho a cada clique. Clique em Editar para mudar o código e refazer as etapas.';
+  if (!editando) $('codigo-erro').hidden = true;
+  $('codigo-m').innerHTML = c && ui.codigoAberto && !editando ? pintarM(M.gerarM(c)) : '';
+  $('ferr-editor').classList.toggle('on', editando);
+}
+
+/* ---------------- barra de fórmula (fx) e Editor avançado: escrever M direto ---------------- */
+function ajustarAlturaFormula() { const f = $('formula'); f.style.height = 'auto'; f.style.height = f.scrollHeight + 'px'; }
+function mostrarFormula(texto) {
+  if (ui.editandoFormula) return; // não apaga o que a pessoa está digitando
+  $('formula').value = texto; $('formula').disabled = !texto;
+  $('formula-erro').hidden = true; $('formula-acoes').hidden = true;
+  ajustarAlturaFormula();
+}
+function aplicarFormula() {
+  const c = atual(); if (!c) return;
+  const i = indiceEtapa(); const etapa = c.etapas[i];
+  try {
+    const dados = M.lerLinhaEtapa($('formula').value, c, i);
+    const antes = JSON.stringify({ ...etapa, id: 0 });
+    c.etapas[i] = { id: etapa.id, nome: etapa.nome, ...dados };
+    ui.editandoFormula = false;
+    if (JSON.stringify({ ...c.etapas[i], id: 0 }) === antes) return render();
+    salvar(); render();
+    const falha = M.executar(c).erro;
+    aviso(falha ? `Etapa "${etapa.nome}" alterada, mas a etapa "${falha.etapa}" ficou com erro.` : `Etapa "${etapa.nome}" alterada pelo código M.`, falha ? 'erro' : 'ok');
+  } catch (e) {
+    $('formula-erro').textContent = e.message.replace(/^Expression\./, '');
+    $('formula-erro').hidden = false;
+  }
+}
+function cancelarFormula() { ui.editandoFormula = false; renderCentro(); $('formula').blur(); }
+function abrirEditorAvancado() {
+  const c = atual(); if (!c) return aviso('Abra uma consulta para editar o código.', 'erro');
+  ui.codigoAberto = true; ui.editandoCodigo = true;
+  render();
+  $('codigo-edicao').value = M.gerarM(c);
+  $('codigo-erro').hidden = true;
+  $('codigo-edicao').focus();
+}
+function aplicarCodigo() {
+  const c = atual(); if (!c) return;
+  try {
+    const etapas = M.lerM($('codigo-edicao').value, c);
+    c.etapas = etapas; ui.etapaSel = null; ui.editandoCodigo = false; ui.msgCelula = '';
+    salvar(); render();
+    const falha = M.executar(c).erro;
+    aviso(falha ? `Código aplicado: ${etapas.length} etapas. A etapa "${falha.etapa}" está com erro; clique nela para ver.` : `Código aplicado: ${etapas.length} etapas refeitas.`, falha ? 'erro' : 'ok', 5000);
+  } catch (e) {
+    $('codigo-erro').textContent = e.message.replace(/^Expression\./, '');
+    $('codigo-erro').hidden = false;
+  }
 }
 
 /* ---------------- 4. grade e menu da coluna ---------------- */
@@ -538,6 +596,7 @@ function confirmar(titulo, texto, ok, acao) {
 
 /* ---------------- 6. ações ---------------- */
 function adicionarEtapa(etapa) {
+  ui.editandoFormula = false;
   const c = atual(); if (!c) return;
   const pos = indiceEtapa();
   const noFim = pos === c.etapas.length - 1;
@@ -574,8 +633,10 @@ function excluirConsulta(id) {
   });
 }
 function ferramenta(nome) {
+  ui.editandoFormula = false;
   if (nome === 'nova') return janelaNova();
-  if (nome === 'codigo') { ui.codigoAberto = !ui.codigoAberto; return render(); }
+  if (nome === 'codigo') { ui.codigoAberto = !ui.codigoAberto; if (!ui.codigoAberto) ui.editandoCodigo = false; return render(); }
+  if (nome === 'editor') { if (ui.editandoCodigo) { ui.editandoCodigo = false; return render(); } return abrirEditorAvancado(); }
   const res = resultadoAtual();
   if (!res || !res.tabela) return aviso('Abra uma consulta sem erro na etapa selecionada para usar as ferramentas.', 'erro');
   if (nome === 'escolher' || nome === 'remover') return janelaColunas(nome);
@@ -592,8 +653,8 @@ document.addEventListener('click', ev => {
   const f = alvo.closest('[data-ferr]'); if (f && !f.disabled) return ferramenta(f.dataset.ferr);
   const x1 = alvo.closest('[data-excluir-consulta]'); if (x1) { ev.stopPropagation(); return excluirConsulta(x1.dataset.excluirConsulta); }
   const x2 = alvo.closest('[data-excluir-etapa]'); if (x2) { ev.stopPropagation(); return excluirEtapa(+x2.dataset.excluirEtapa); }
-  const lc = alvo.closest('[data-consulta]'); if (lc) { ui.sel = lc.dataset.consulta; ui.etapaSel = null; ui.msgCelula = ''; salvar(); return render(); }
-  const le = alvo.closest('[data-etapa]'); if (le) { const c = atual(); const i = +le.dataset.etapa; ui.etapaSel = i === c.etapas.length - 1 ? null : i; ui.msgCelula = ''; return render(); }
+  const lc = alvo.closest('[data-consulta]'); if (lc) { ui.editandoFormula = false; ui.editandoCodigo = false; ui.sel = lc.dataset.consulta; ui.etapaSel = null; ui.msgCelula = ''; salvar(); return render(); }
+  const le = alvo.closest('[data-etapa]'); if (le) { ui.editandoFormula = false; const c = atual(); const i = +le.dataset.etapa; ui.etapaSel = i === c.etapas.length - 1 ? null : i; ui.msgCelula = ''; return render(); }
   const ir = alvo.closest('[data-ir-etapa]'); if (ir) { ui.etapaSel = +ir.dataset.irEtapa; return render(); }
   const col = alvo.closest('[data-coluna]'); if (col) return abrirMenuColuna(+col.dataset.coluna, col);
   const cel = alvo.closest('td.erro'); if (cel) { ui.msgCelula = cel.dataset.erro; return renderCentro(); }
@@ -610,6 +671,27 @@ $('nome-consulta').addEventListener('change', ev => {
   if (!novo) { ev.target.value = c.nome; return aviso('O nome da consulta não pode ficar vazio.', 'erro'); }
   if (novo !== c.nome && ui.consultas.some(x => x.nome === novo)) { ev.target.value = c.nome; return aviso(`Já existe uma consulta chamada "${novo}".`, 'erro'); }
   c.nome = novo; salvar(); renderConsultas();
+});
+$('formula').addEventListener('focus', () => { if ($('formula').disabled) return; ui.editandoFormula = true; $('formula-acoes').hidden = false; });
+$('formula').addEventListener('input', ajustarAlturaFormula);
+$('formula').addEventListener('blur', () => { // saiu sem mudar nada: volta ao normal
+  const c = atual(); if (!c || !ui.editandoFormula) return;
+  if ($('formula').value === M.gerarMEtapa(c, indiceEtapa())) { ui.editandoFormula = false; $('formula-acoes').hidden = true; $('formula-erro').hidden = true; }
+});
+$('formula').addEventListener('keydown', ev => {
+  if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); aplicarFormula(); }
+  if (ev.key === 'Escape') { ev.preventDefault(); cancelarFormula(); }
+});
+$('formula-ok').addEventListener('mousedown', ev => ev.preventDefault()); // não deixa o clique tirar o foco antes de aplicar
+$('formula-ok').addEventListener('click', aplicarFormula);
+$('formula-cancelar').addEventListener('mousedown', ev => ev.preventDefault());
+$('formula-cancelar').addEventListener('click', cancelarFormula);
+$('btn-editar-codigo').addEventListener('click', abrirEditorAvancado);
+$('btn-aplicar-codigo').addEventListener('click', aplicarCodigo);
+$('btn-cancelar-codigo').addEventListener('click', () => { ui.editandoCodigo = false; render(); });
+$('codigo-edicao').addEventListener('keydown', ev => {
+  if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); aplicarCodigo(); }
+  if (ev.key === 'Tab') { ev.preventDefault(); const t = ev.target, a = t.selectionStart; t.value = t.value.slice(0, a) + '    ' + t.value.slice(t.selectionEnd); t.selectionStart = t.selectionEnd = a + 4; }
 });
 $('btn-copiar').addEventListener('click', () => {
   const c = atual(); if (!c) return;

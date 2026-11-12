@@ -80,6 +80,7 @@
       </div><span>Adicionar coluna</span></div>
       <div class="faixa-grupo"><div>
         <button class="ferr" type="button" data-ferr="codigo" id="ferr-codigo"><b>M</b>Código M</button>
+        <button class="ferr" type="button" data-ferr="editor" id="ferr-editor"><b>{ }</b>Editor avançado</button>
       </div><span>Exibir</span></div>
     </div>
 
@@ -92,7 +93,17 @@
       </section>
 
       <section class="centro" aria-label="Dados">
-        <div class="formula"><span class="fx">fx</span><code id="formula"></code></div>
+        <div class="formula-wrap">
+          <div class="formula" id="barra-formula">
+            <span class="fx">fx</span>
+            <textarea id="formula" rows="1" spellcheck="false" aria-label="Fórmula M da etapa selecionada (clique para editar)" title="Clique para editar a etapa em M. Enter aplica, Esc cancela."></textarea>
+            <span class="formula-acoes" id="formula-acoes" hidden>
+              <button type="button" class="btn peq prim" id="formula-ok" title="Aplicar (Enter)">✓</button>
+              <button type="button" class="btn peq" id="formula-cancelar" title="Cancelar (Esc)">✕</button>
+            </span>
+          </div>
+          <div class="formula-erro" id="formula-erro" role="alert" hidden></div>
+        </div>
         <div class="grade-area" id="grade-area"></div>
         <div class="rodape-grade" id="rodape-grade"></div>
       </section>
@@ -113,13 +124,20 @@
     <section class="codigo" id="painel-codigo" hidden aria-label="Código M">
       <header>
         <h2>Código M da consulta</h2>
-        <span>Escrito sozinho a cada clique. A edição direta chega na etapa E2.</span>
-        <div class="acoes">
+        <span id="codigo-dica">Escrito sozinho a cada clique. Clique em Editar para mudar o código e refazer as etapas.</span>
+        <div class="acoes" id="codigo-acoes-ver">
+          <button class="btn peq" type="button" id="btn-editar-codigo">Editar</button>
           <button class="btn peq" type="button" id="btn-copiar">Copiar</button>
           <button class="btn peq" type="button" data-ferr="codigo">Fechar</button>
         </div>
+        <div class="acoes" id="codigo-acoes-editar" hidden>
+          <button class="btn peq prim" type="button" id="btn-aplicar-codigo">Aplicar código</button>
+          <button class="btn peq" type="button" id="btn-cancelar-codigo">Cancelar</button>
+        </div>
       </header>
       <pre id="codigo-m"></pre>
+      <textarea id="codigo-edicao" spellcheck="false" aria-label="Código M da consulta" hidden></textarea>
+      <div class="codigo-erro" id="codigo-erro" role="alert" hidden></div>
     </section>
   </main>
 </div>

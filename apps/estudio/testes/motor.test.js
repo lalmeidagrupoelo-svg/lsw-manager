@@ -95,4 +95,54 @@ teste('conversões no padrão brasileiro', () => {
   assert.strictEqual(M.formatar('2026-11-03', 'data'), '03/11/2026');
 });
 
+teste('E2: ler o M gerado devolve as mesmas etapas (ida e volta)', () => {
+  const c = M.consultaDeCsv('a', 'atendimentos.csv', csv);
+  M.inserirEtapa(c, { tipo: 'tipos', lista: [['CHAMADAS', 'inteiro']] });
+  M.inserirEtapa(c, { tipo: 'filtrar', expr: '([OPERAÇÃO] <> "SAC" and [CANAL] = "VOZ") or [LOGIN] < #time(7, 0, 0)' });
+  M.inserirEtapa(c, { tipo: 'renomear', pares: [['TEMPO_FALADO_S', 'TEMPO']] });
+  M.inserirEtapa(c, { tipo: 'remover', colunas: ['LOGIN'] });
+  M.inserirEtapa(c, { tipo: 'adicionar', coluna: 'TMA', expr: 'Number.Round([TEMPO] / [CHAMADAS], 1)', tipoColuna: 'decimal' });
+  const texto = M.gerarM(c);
+  const etapas = M.lerM(texto, c);
+  const limpar = l => l.map(({ id, ...r }) => r);
+  assert.deepStrictEqual(limpar(etapas), limpar(c.etapas));
+  assert.strictEqual(M.gerarM({ ...c, etapas }), texto);
+});
+
+teste('E2: código editado à mão vira etapas novas, com comentários e alias de tipo', () => {
+  const c = M.consultaDeCsv('a', 'atendimentos.csv', csv);
+  const texto = `let
+    // lê o arquivo
+    Fonte = Csv.Document(File.Contents("atendimentos.csv"), [Delimiter=";", Encoding=65001]),
+    #"Cabeçalhos Promovidos" = Table.PromoteHeaders(Fonte, [PromoteAllScalars=true]),
+    Tipos = Table.TransformColumnTypes(#"Cabeçalhos Promovidos", {{"DATA", type date}, {"TEMPO_FALADO_S", Number.Type}}),
+    SoChat = Table.SelectRows(Tipos, each [CANAL] = "CHAT"),
+    Renomeada = Table.RenameColumns(SoChat, {"TEMPO_FALADO_S", "TEMPO"})
+in
+    Renomeada`;
+  const etapas = M.lerM(texto, c);
+  assert.deepStrictEqual(etapas.map(e => e.tipo), ['fonte', 'promover', 'tipos', 'filtrar', 'renomear']);
+  assert.deepStrictEqual(etapas[4].pares, [['TEMPO_FALADO_S', 'TEMPO']]);
+  const { tabela, erro } = M.executar({ ...c, etapas });
+  assert.strictEqual(erro, null);
+  assert.ok(tabela.linhas.length > 0 && tabela.colunas.some(x => x.nome === 'TEMPO'));
+});
+
+teste('E2: erros de M explicam o que corrigir', () => {
+  const c = M.consultaDeCsv('a', 'atendimentos.csv', csv);
+  const base = 'let\n Fonte = Csv.Document(File.Contents("atendimentos.csv"), [Delimiter=";"]),\n P = Table.PromoteHeaders(Fonte)';
+  assert.throws(() => M.lerM(base + ',\n F = Table.Group(P, {"A"}, {})\nin\n F', c), /Table.Group ainda não está no Estúdio/);
+  assert.throws(() => M.lerM(base + ',\n F = Table.SelectRows(Fonte, each [A] = 1)\nin\n F', c), /etapa logo acima.*deveria ser P/);
+  assert.throws(() => M.lerM(base + '\nin\n Fonte', c), /depois do "in" vai o nome da última etapa: P/);
+  assert.throws(() => M.lerM(base + ',\n F = Table.SelectRows(P, [A] = 1)\nin\n F', c), /começar com "each"/);
+  assert.throws(() => M.lerM(base.replace('atendimentos.csv', 'outro.csv') + '\nin\n P', c), /não está carregado/);
+});
+
+teste('E2: barra de fórmula troca uma etapa', () => {
+  const c = M.consultaDeCsv('a', 'atendimentos.csv', csv);
+  M.inserirEtapa(c, { tipo: 'filtrar', expr: '[CANAL] = "VOZ"' });
+  const dados = M.lerLinhaEtapa('= Table.SelectRows(#"Tipo Alterado", each [CANAL] = "CHAT")', c, 3);
+  assert.deepStrictEqual(dados, { tipo: 'filtrar', expr: '[CANAL] = "CHAT"' });
+});
+
 console.log(`\n${ok} testes passaram.`);

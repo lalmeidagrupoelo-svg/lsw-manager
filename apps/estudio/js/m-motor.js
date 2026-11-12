@@ -541,8 +541,171 @@
     return tab.linhas.slice(0, n).map(l => avaliar(arvore, objetoLinha(tab, l)));
   }
 
+  /* ---------------- leitor de M (E2): texto → etapas ----------------
+     Faz o caminho de volta do gerarM: lê o "let ... in" (Editor avançado) ou uma linha
+     da barra de fórmula e devolve as etapas. Aceita só as funções do catálogo ETAPAS;
+     o resto vira uma mensagem dizendo o que ainda não é suportado. */
+  // Divide o texto nos separadores do nível de fora (fora de aspas, (), {}, [])
+  function dividirTopo(texto, separador = ',') {
+    const partes = []; let prof = 0, aspasAbertas = false, ini = 0;
+    for (let i = 0; i < texto.length; i++) {
+      const c = texto[i];
+      if (aspasAbertas) { if (c === '"') { if (texto[i + 1] === '"') i++; else aspasAbertas = false; } continue; }
+      if (c === '"') aspasAbertas = true;
+      else if ('([{'.includes(c)) prof++;
+      else if (')]}'.includes(c)) prof--;
+      else if (c === separador && prof === 0) { partes.push(texto.slice(ini, i)); ini = i + 1; }
+    }
+    partes.push(texto.slice(ini));
+    return partes.map(p => p.trim()).filter((p, i, a) => p !== '' || a.length > 1);
+  }
+  function semComentarios(texto) {
+    let out = '', aspasAbertas = false;
+    for (let i = 0; i < texto.length; i++) {
+      const c = texto[i];
+      if (aspasAbertas) { out += c; if (c === '"') { if (texto[i + 1] === '"') { out += '"'; i++; } else aspasAbertas = false; } continue; }
+      if (c === '"') { aspasAbertas = true; out += c; continue; }
+      if (c === '/' && texto[i + 1] === '/') { while (i < texto.length && texto[i] !== '\n') i++; out += '\n'; continue; }
+      if (c === '/' && texto[i + 1] === '*') { const f = texto.indexOf('*/', i + 2); i = f < 0 ? texto.length : f + 1; out += ' '; continue; }
+      out += c;
+    }
+    return out;
+  }
+  const RE_NOME = /^\s*(#"(?:[^"]|"")*"|[A-Za-z_][A-Za-z0-9_]*)/;
+  const lerNome = s => { const m = RE_NOME.exec(s); if (!m) return null; const n = m[1]; return { nome: n.startsWith('#"') ? n.slice(2, -1).replace(/""/g, '"') : n, resto: s.slice(m[0].length) }; };
+  function lerTexto(a, oque) {
+    const m = /^"((?:[^"]|"")*)"$/.exec(String(a).trim());
+    if (!m) throw new FalhaEtapa(`era esperado um texto entre aspas para ${oque} e veio ${a || 'nada'}.`);
+    return m[1].replace(/""/g, '"');
+  }
+  function lerLista(a, oque) {
+    const m = /^\{([\s\S]*)\}$/.exec(String(a).trim());
+    if (!m) throw new FalhaEtapa(`era esperada uma lista entre chaves { } para ${oque}.`);
+    return m[1].trim() === '' ? [] : dividirTopo(m[1]);
+  }
+  const ALIAS_TIPO = { 'Text.Type': 'texto', 'Number.Type': 'decimal', 'Currency.Type': 'decimal', 'Percentage.Type': 'decimal', 'Int32.Type': 'inteiro', 'Int16.Type': 'inteiro', 'Date.Type': 'data', 'DateTime.Type': 'dataHora', 'Time.Type': 'hora', 'Logical.Type': 'logico', 'Any.Type': 'qualquer' };
+  function lerTipo(a) {
+    const t = String(a).trim().replace(/\s+/g, ' ');
+    const k = TIPO_DO_M[t] || ALIAS_TIPO[t];
+    if (!k) throw new FalhaEtapa(`o tipo ${t} não é reconhecido. Use, por exemplo: type text, Int64.Type, type number, type date, type datetime, type time ou type logical.`);
+    return k;
+  }
+  function lerRegistro(a) {
+    const m = /^\[([\s\S]*)\]$/.exec(String(a).trim()); if (!m) return {};
+    const out = {};
+    dividirTopo(m[1]).forEach(par => { const i = par.indexOf('='); if (i > 0) out[par.slice(0, i).trim()] = par.slice(i + 1).trim(); });
+    return out;
+  }
+  function lerEach(a) {
+    const m = /^each\s+([\s\S]+)$/.exec(String(a).trim());
+    if (!m) throw new FalhaEtapa('a condição ou a fórmula precisa começar com "each" (ex.: each [CANAL] = "VOZ").');
+    const expr = m[1].trim();
+    analisar(expr); // confere a escrita da expressão
+    return expr;
+  }
+  const FUNCOES_ETAPA = 'Csv.Document, Table.PromoteHeaders, Table.TransformColumnTypes, Table.SelectColumns, Table.RemoveColumns, Table.SelectRows, Table.RenameColumns e Table.AddColumn';
+
+  // Lê a expressão de UMA etapa. "anterior" é o nome da etapa de cima (null para a primeira).
+  function lerExpressaoEtapa(expr, anterior, consulta) {
+    const m = /^\s*([A-Za-z][A-Za-z0-9.]*)\s*\(([\s\S]*)\)\s*$/.exec(expr);
+    if (!m) throw new FalhaEtapa(`não entendi "${expr.trim().slice(0, 60)}". Cada etapa precisa ser uma chamada de função, como Table.SelectRows(...).`);
+    const [, fn, corpo] = m;
+    const args = dividirTopo(corpo);
+    const exigeAnterior = () => {
+      if (anterior === null) throw new FalhaEtapa(`${fn} não pode ser a primeira etapa: ela trabalha sobre uma tabela que já existe.`);
+      const r = lerNome(args[0] || '');
+      if (!r || r.resto.trim() !== '' || r.nome !== anterior) throw new FalhaEtapa(`nesta versão, cada etapa usa a etapa logo acima. Aqui o primeiro valor de ${fn} deveria ser ${idM(anterior)}.`);
+    };
+    const qtd = (min, max) => { if (args.length < min || args.length > max) throw new FalhaEtapa(`${fn} recebeu ${args.length} valor(es); o esperado é ${min === max ? min : `de ${min} a ${max}`}.`); };
+    switch (fn) {
+      case 'Csv.Document': {
+        if (anterior !== null) throw new FalhaEtapa('Csv.Document só pode ser a primeira etapa (Fonte).');
+        qtd(1, 2);
+        const arq = /^File\.Contents\(\s*("(?:[^"]|"")*")\s*\)$/.exec(args[0].trim());
+        if (!arq) throw new FalhaEtapa('o primeiro valor de Csv.Document precisa ser File.Contents("arquivo.csv").');
+        const arquivo = lerTexto(arq[1], 'o arquivo');
+        if (consulta && consulta.fonte && consulta.fonte.arquivo !== arquivo) throw new FalhaEtapa(`o arquivo "${arquivo}" não está carregado nesta consulta. O arquivo dela é "${consulta.fonte.arquivo}". Para outro arquivo, use + Nova consulta.`);
+        const reg = lerRegistro(args[1] || '');
+        let delim = reg.Delimiter ? reg.Delimiter.trim() : '";"';
+        delim = delim === '"#(tab)"' ? '\t' : lerTexto(delim, 'o Delimiter');
+        return { tipo: 'fonte', arquivo, delimitador: delim };
+      }
+      case 'Table.PromoteHeaders': qtd(1, 2); exigeAnterior(); return { tipo: 'promover' };
+      case 'Table.TransformColumnTypes': {
+        qtd(2, 3); exigeAnterior();
+        const itens = lerLista(args[1], 'as colunas e tipos');
+        const lista = itens.map(it => { const par = lerLista(it, 'cada par {"Coluna", tipo}'); if (par.length !== 2) throw new FalhaEtapa('cada item precisa ser {"Coluna", tipo}.'); return [lerTexto(par[0], 'o nome da coluna'), lerTipo(par[1])]; });
+        if (!lista.length) throw new FalhaEtapa('a lista de colunas e tipos está vazia.');
+        return { tipo: 'tipos', lista };
+      }
+      case 'Table.SelectColumns':
+      case 'Table.RemoveColumns': {
+        qtd(2, 3); exigeAnterior();
+        const colunas = args[1].trim().startsWith('{') ? lerLista(args[1], 'as colunas').map(c => lerTexto(c, 'o nome da coluna')) : [lerTexto(args[1], 'o nome da coluna')];
+        if (!colunas.length) throw new FalhaEtapa('a lista de colunas está vazia.');
+        return { tipo: fn === 'Table.SelectColumns' ? 'escolher' : 'remover', colunas };
+      }
+      case 'Table.SelectRows': qtd(2, 2); exigeAnterior(); return { tipo: 'filtrar', expr: lerEach(args[1]) };
+      case 'Table.RenameColumns': {
+        qtd(2, 3); exigeAnterior();
+        let itens = lerLista(args[1], 'os pares {"antigo", "novo"}');
+        if (itens.length === 2 && itens[0].trim().startsWith('"')) itens = [args[1]]; // um par só: {"a", "b"}
+        const pares = itens.map(it => { const par = lerLista(it, 'cada par'); if (par.length !== 2) throw new FalhaEtapa('cada item precisa ser {"nome antigo", "nome novo"}.'); return [lerTexto(par[0], 'o nome antigo'), lerTexto(par[1], 'o nome novo')]; });
+        return { tipo: 'renomear', pares };
+      }
+      case 'Table.AddColumn': {
+        qtd(3, 4); exigeAnterior();
+        return { tipo: 'adicionar', coluna: lerTexto(args[1], 'o nome da nova coluna'), expr: lerEach(args[2]), tipoColuna: args[3] ? lerTipo(args[3]) : 'qualquer' };
+      }
+    }
+    throw new FalhaEtapa(`a função ${fn} ainda não está no Estúdio. Por enquanto as etapas podem usar: ${FUNCOES_ETAPA}.`);
+  }
+
+  // Lê o código M inteiro (let ... in ...) e devolve a nova lista de etapas
+  function lerM(texto, consulta) {
+    const limpo = semComentarios(String(texto)).trim();
+    const m = /^let\b([\s\S]*)$/.exec(limpo);
+    if (!m) throw new FalhaEtapa('o código precisa começar com "let".');
+    // procura o "in" do nível de fora (fora de aspas e de parênteses)
+    const corpo = m[1]; let prof = 0, aspasAbertas = false, posIn = -1;
+    for (let i = 0; i < corpo.length; i++) {
+      const c = corpo[i];
+      if (aspasAbertas) { if (c === '"') { if (corpo[i + 1] === '"') i++; else aspasAbertas = false; } continue; }
+      if (c === '"') aspasAbertas = true;
+      else if ('([{'.includes(c)) prof++;
+      else if (')]}'.includes(c)) prof--;
+      else if (prof === 0 && /\bin\b/.test(corpo.slice(i, i + 3)) && /[\s,)\]}]/.test(corpo[i - 1] || ' ') && /\s/.test(corpo[i + 2] || '')) posIn = i;
+    }
+    if (posIn < 0) throw new FalhaEtapa('faltou o "in" no fim, com o nome da última etapa.');
+    const defs = dividirTopo(corpo.slice(0, posIn));
+    const final = lerNome(corpo.slice(posIn + 2));
+    const etapas = []; const vistos = new Set();
+    defs.forEach((def, i) => {
+      const r = lerNome(def);
+      const pos = `Linha da etapa ${i + 1}`;
+      if (!r || !/^\s*=/.test(r.resto)) throw new FalhaEtapa(`${pos}: cada etapa é escrita como Nome = Função(...). Nomes com espaço ou acento vão como #"Nome da etapa".`);
+      if (vistos.has(r.nome)) throw new FalhaEtapa(`${pos}: o nome "${r.nome}" já foi usado em outra etapa.`);
+      vistos.add(r.nome);
+      try {
+        const dados = lerExpressaoEtapa(r.resto.replace(/^\s*=/, ''), i ? etapas[i - 1].nome : null, consulta);
+        etapas.push({ id: 'e' + (i + 1) + Math.random().toString(36).slice(2, 6), nome: r.nome, ...dados });
+      } catch (e) { throw new FalhaEtapa(`Etapa "${r.nome}": ${e.message}`); }
+    });
+    if (!etapas.length) throw new FalhaEtapa('nenhuma etapa encontrada entre o "let" e o "in".');
+    if (!final || final.resto.trim() !== '' || final.nome !== etapas[etapas.length - 1].nome) throw new FalhaEtapa(`depois do "in" vai o nome da última etapa: ${idM(etapas[etapas.length - 1].nome)}.`);
+    return etapas;
+  }
+
+  // Lê a linha da barra de fórmula ("= Table.SelectRows(...)") para a etapa de índice i
+  function lerLinhaEtapa(texto, consulta, i) {
+    const expr = semComentarios(String(texto)).trim().replace(/^=/, '');
+    const anterior = i > 0 ? consulta.etapas[i - 1].nome : null;
+    return lerExpressaoEtapa(expr, anterior, consulta);
+  }
+
   const api = {
     TIPOS, TIPO_DO_M, FUNCOES_M, ETAPAS, OPERADORES, ErroM, FalhaEtapa,
+    lerM, lerLinhaEtapa, dividirTopo,
     ehErro, converter, formatar, detectarTipo, lerCsv, lerNumero, lerData,
     analisar, avaliar, colunasUsadas, gerarM, gerarMEtapa, executar, qualidade,
     consultaDeCsv, inserirEtapa, nomeUnico, exprCondicao, literalM, testarExpressao, idM,
