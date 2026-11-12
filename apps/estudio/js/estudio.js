@@ -468,7 +468,7 @@ function janelaFiltrar(pre) {
         if (input.disabled) return;
         const q = filtrarPorTexto ? input.value.trim().toLowerCase() : '';
         const vals = valoresDe(campo(el, 'col').value).filter(v => !q || v.toLowerCase().includes(q)).slice(0, 80);
-        lista.innerHTML = vals.length ? vals.map(v => `<li role="option" data-valor="${esc(v)}" class="${v === input.value ? 'on' : ''}">${v !== v.trim() ? `<span class="mono">"${esc(v)}"</span> <small>tem espaços sobrando</small>` : esc(v)}</li>`).join('') : '<li class="vazio">Nenhum valor com esse texto</li>';
+        lista.innerHTML = vals.length ? vals.map(v => `<li role="option" data-valor="${esc(v)}" class="${v === input.value ? 'on' : ''}">${esc(v)}</li>`).join('') : '<li class="vazio">Nenhum valor com esse texto</li>';
         lista.hidden = false;
       };
       const fecharValores = () => raiz.querySelectorAll('.cond-sugestoes').forEach(l => { l.hidden = true; });
@@ -802,7 +802,16 @@ $('fonte-mais').addEventListener('click', () => salvarPref('fonte', Math.min(15,
 (async function iniciar() {
   aplicarPrefs();
   const salvo = await Armazenamento.carregar();
-  if (salvo && Array.isArray(salvo.consultas)) { ui.consultas = salvo.consultas; ui.sel = salvo.sel; }
+  if (salvo && Array.isArray(salvo.consultas)) {
+    ui.consultas = salvo.consultas; ui.sel = salvo.sel;
+    // consultas salvas antes de 13/11 ganham a etapa "Espaços Removidos" logo depois do "Tipo Alterado" automático
+    ui.consultas.forEach(c => {
+      const i = c.etapas.findIndex(e => e.tipo === 'tipos');
+      if (i !== 2 || c.etapas.some(e => e.tipo === 'limparEspacos')) return;
+      const textos = c.etapas[i].lista.filter(([, t]) => t === 'texto').map(([col]) => col);
+      if (textos.length) M.inserirEtapa(c, { tipo: 'limparEspacos', colunas: textos }, i);
+    });
+  }
   else { ui.consultas = consultasDeExemplo(); ui.sel = ui.consultas[0] ? ui.consultas[0].id : null; }
   if (!atual() && ui.consultas[0]) ui.sel = ui.consultas[0].id;
   render();

@@ -34,6 +34,7 @@ Ferramenta para **montar bases e relatórios** no estilo Power BI, dentro do nav
 |---|---|---|
 | `fonte` | Fonte | `Csv.Document(File.Contents(...), [Delimiter=";", Encoding=65001])` |
 | `promover` | Cabeçalhos Promovidos | `Table.PromoteHeaders(..., [PromoteAllScalars=true])` |
+| `limparEspacos` | Espaços Removidos (automática na importação, colunas de texto) | `Table.TransformColumns(..., {{"COL", each Text.Combine(List.Select(Text.Split(_, " "), each _ <> ""), " "), type text}})` |
 | `tipos` | Tipo Alterado | `Table.TransformColumnTypes(..., {{"COL", Int64.Type}})` |
 | `escolher` | Outras Colunas Removidas | `Table.SelectColumns(..., {"A", "B"})` |
 | `remover` | Colunas Removidas | `Table.RemoveColumns(..., {"A"})` |

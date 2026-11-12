@@ -10,9 +10,9 @@ const csv = fs.readFileSync(path.join(__dirname, '../dados-demo/atendimentos.csv
 
 console.log('Motor M');
 
-teste('importar CSV cria Fonte, Cabeçalhos Promovidos e Tipo Alterado', () => {
+teste('importar CSV cria Fonte, Cabeçalhos Promovidos, Tipo Alterado e Espaços Removidos', () => {
   const c = M.consultaDeCsv('atendimentos', 'atendimentos.csv', csv);
-  assert.deepStrictEqual(c.etapas.map(e => e.nome), ['Fonte', 'Cabeçalhos Promovidos', 'Tipo Alterado']);
+  assert.deepStrictEqual(c.etapas.map(e => e.nome), ['Fonte', 'Cabeçalhos Promovidos', 'Tipo Alterado', 'Espaços Removidos']);
   const { tabela } = M.executar(c);
   assert.deepStrictEqual(tabela.colunas.map(x => x.nome), ['DATA', 'MATRICULA', 'OPERAÇÃO', 'CANAL', 'CHAMADAS', 'TEMPO_FALADO_S', 'LOGIN']);
   const tipo = n => tabela.colunas.find(x => x.nome === n).tipo;
@@ -20,12 +20,17 @@ teste('importar CSV cria Fonte, Cabeçalhos Promovidos e Tipo Alterado', () => {
   assert.strictEqual(tipo('MATRICULA'), 'inteiro');
   assert.strictEqual(tipo('CHAMADAS'), 'texto', 'tem "n/d", então fica texto');
   assert.strictEqual(tipo('LOGIN'), 'hora');
+  const op = tabela.colunas.findIndex(x => x.nome === 'OPERAÇÃO');
+  assert.deepStrictEqual([...new Set(tabela.linhas.map(l => l[op]))].sort(), ['COBRANÇA', 'SAC', 'SUPORTE TÉCNICO', 'VENDAS'], 'espaços sobrando saem na importação');
+  assert.strictEqual(M.converter('  a   b  ', 'texto'), '  a   b  ');
+  const t2 = M.ETAPAS.limparEspacos.executar({ colunas: [{ nome: 'X', tipo: 'texto' }], linhas: [['  a   b  '], [null]] }, { colunas: ['X'] });
+  assert.deepStrictEqual(t2.linhas, [['a b'], [null]]);
 });
 
 teste('trocar CHAMADAS para inteiro gera Error só nas células "n/d"', () => {
   const c = M.consultaDeCsv('a', 'atendimentos.csv', csv);
   M.inserirEtapa(c, { tipo: 'tipos', lista: [['CHAMADAS', 'inteiro']] });
-  assert.strictEqual(c.etapas[3].nome, 'Tipo Alterado1');
+  assert.strictEqual(c.etapas[4].nome, 'Tipo Alterado1');
   const { tabela } = M.executar(c);
   const i = tabela.colunas.findIndex(x => x.nome === 'CHAMADAS');
   const q = M.qualidade(tabela, i);
@@ -56,7 +61,7 @@ teste('código M gerado tem let/in e os nomes com #"..."', () => {
   const m = M.gerarM(c);
   assert.ok(m.startsWith('let\n    Fonte = Csv.Document(File.Contents("atendimentos.csv"), [Delimiter=";", Encoding=65001]),'));
   assert.ok(m.includes('#"Cabeçalhos Promovidos" = Table.PromoteHeaders(Fonte, [PromoteAllScalars=true])'));
-  assert.ok(m.includes('#"Linhas Filtradas" = Table.SelectRows(#"Tipo Alterado", each [CANAL] = "VOZ")'));
+  assert.ok(m.includes('#"Linhas Filtradas" = Table.SelectRows(#"Espaços Removidos", each [CANAL] = "VOZ")'));
   assert.ok(m.trim().endsWith('in\n    #"Linhas Filtradas"'));
 });
 
@@ -64,7 +69,7 @@ teste('excluir uma etapa do meio faz a seguinte falhar com mensagem clara', () =
   const c = M.consultaDeCsv('a', 'atendimentos.csv', csv);
   M.inserirEtapa(c, { tipo: 'renomear', pares: [['TEMPO_FALADO_S', 'TEMPO']] });
   M.inserirEtapa(c, { tipo: 'adicionar', coluna: 'MIN', expr: '[TEMPO] / 60', tipoColuna: 'decimal' });
-  c.etapas.splice(3, 1); // apaga a renomeação
+  c.etapas.splice(4, 1); // apaga a renomeação
   const { erro } = M.executar(c);
   assert.strictEqual(erro.etapa, 'Personalização Adicionada');
   assert.ok(/coluna "TEMPO".*não foi encontrada/.test(erro.mensagem));
@@ -141,7 +146,7 @@ teste('E2: erros de M explicam o que corrigir', () => {
 teste('E2: barra de fórmula troca uma etapa', () => {
   const c = M.consultaDeCsv('a', 'atendimentos.csv', csv);
   M.inserirEtapa(c, { tipo: 'filtrar', expr: '[CANAL] = "VOZ"' });
-  const dados = M.lerLinhaEtapa('= Table.SelectRows(#"Tipo Alterado", each [CANAL] = "CHAT")', c, 3);
+  const dados = M.lerLinhaEtapa('= Table.SelectRows(#"Espaços Removidos", each [CANAL] = "CHAT")', c, 4);
   assert.deepStrictEqual(dados, { tipo: 'filtrar', expr: '[CANAL] = "CHAT"' });
 });
 

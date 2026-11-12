@@ -348,6 +348,8 @@
   const objetoLinha = (tab, linha) => { const o = {}; tab.colunas.forEach((c, i) => { o[c.nome] = linha[i]; }); return o; };
   const semEach = e => String(e).trim().replace(/^each\s+/, '');
 
+  // Em M puro: separa o texto nos espaços, joga fora os pedaços vazios e junta de novo com um espaço só
+  const M_LIMPAR = 'each Text.Combine(List.Select(Text.Split(_, " "), each _ <> ""), " ")';
   const ETAPAS = {
     fonte: {
       nome: 'Fonte', descricao: 'Lê o arquivo CSV',
@@ -379,6 +381,17 @@
         const colunas = tab.colunas.map(c => ({ ...c }));
         idx.forEach(([i, t]) => { colunas[i].tipo = t; });
         const linhas = tab.linhas.map(l => { const n = l.slice(); idx.forEach(([i, t]) => { n[i] = converter(n[i], t); }); return n; });
+        return { colunas, linhas };
+      },
+    },
+    limparEspacos: {
+      nome: 'Espaços Removidos', descricao: 'Tira os espaços do começo e do fim e deixa um espaço só entre as palavras',
+      m: (e, ant) => `Table.TransformColumns(${ant}, ${listaM(e.colunas.map(c => `{${aspas(c)}, ${M_LIMPAR}, type text}`))})`,
+      executar: (tab, e) => {
+        const idx = e.colunas.map(c => exigeColuna(tab, c));
+        const colunas = tab.colunas.map(c => ({ ...c }));
+        idx.forEach(i => { colunas[i].tipo = 'texto'; });
+        const linhas = tab.linhas.map(l => { const n = l.slice(); idx.forEach(i => { if (typeof n[i] === 'string') n[i] = n[i].replace(/\s+/g, ' ').trim(); }); return n; });
         return { colunas, linhas };
       },
     },
@@ -495,6 +508,8 @@
     if (tab && tab.colunas.length) {
       const lista = tab.colunas.map((c, i) => [c.nome, detectarTipo(tab.linhas.map(l => l[i]))]);
       consulta.etapas.push({ id: novoId(), tipo: 'tipos', nome: 'Tipo Alterado', lista });
+      const textos = lista.filter(([, t]) => t === 'texto').map(([c]) => c);
+      if (textos.length) consulta.etapas.push({ id: novoId(), tipo: 'limparEspacos', nome: 'Espaços Removidos', colunas: textos });
     }
     return consulta;
   }
@@ -684,7 +699,7 @@
     analisar(expr); // confere a escrita da expressão
     return expr;
   }
-  const FUNCOES_ETAPA = 'Csv.Document, Table.PromoteHeaders, Table.TransformColumnTypes, Table.SelectColumns, Table.RemoveColumns, Table.SelectRows, Table.RenameColumns e Table.AddColumn';
+  const FUNCOES_ETAPA = 'Csv.Document, Table.PromoteHeaders, Table.TransformColumnTypes, Table.TransformColumns (limpeza de espaços), Table.SelectColumns, Table.RemoveColumns, Table.SelectRows, Table.RenameColumns e Table.AddColumn';
 
   // Lê a expressão de UMA etapa. "anterior" é o nome da etapa de cima (null para a primeira).
   function lerExpressaoEtapa(expr, anterior, consulta) {
@@ -718,6 +733,16 @@
         const lista = itens.map(it => { const par = lerLista(it, 'cada par {"Coluna", tipo}'); if (par.length !== 2) throw new FalhaEtapa('cada item precisa ser {"Coluna", tipo}.'); return [lerTexto(par[0], 'o nome da coluna'), lerTipo(par[1])]; });
         if (!lista.length) throw new FalhaEtapa('a lista de colunas e tipos está vazia.');
         return { tipo: 'tipos', lista };
+      }
+      case 'Table.TransformColumns': {
+        qtd(2, 3); exigeAnterior();
+        const normal = x => x.replace(/\s+/g, ' ').trim();
+        const colunas = lerLista(args[1], 'as colunas').map(it => {
+          const par = lerLista(it, 'cada item {"Coluna", função, tipo}');
+          if (par.length < 2 || normal(par[1]) !== normal(M_LIMPAR)) throw new FalhaEtapa(`por enquanto Table.TransformColumns só aceita a limpeza de espaços: {"Coluna", ${M_LIMPAR}, type text}.`);
+          return lerTexto(par[0], 'o nome da coluna');
+        });
+        return { tipo: 'limparEspacos', colunas };
       }
       case 'Table.SelectColumns':
       case 'Table.RemoveColumns': {

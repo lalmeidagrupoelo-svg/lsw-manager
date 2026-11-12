@@ -218,7 +218,6 @@ select.cond-junta { color: var(--link); padding: 7px 4px; }
 .cond-sugestoes { position: absolute; z-index: 5; top: calc(100% + 2px); left: 0; right: 0; max-height: 220px; overflow-y: auto; margin: 0; padding: 4px; list-style: none; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; box-shadow: 0 10px 24px rgba(0, 0, 0, .2); }
 .cond-sugestoes li { padding: 5px 8px; border-radius: 4px; font-size: var(--fs-13); cursor: pointer; }
 .cond-sugestoes li:hover, .cond-sugestoes li.on { background: var(--accent-soft); }
-.cond-sugestoes li small { color: var(--warn); font-size: var(--fs-11); }
 .cond-sugestoes li.vazio { color: var(--muted); cursor: default; background: none; }
 .cond-x { width: 30px; height: 30px; border-radius: 6px; border: 1px solid var(--border); background: none; color: var(--muted); font-size: var(--fs-16); line-height: 1; }
 .cond-x:hover { color: var(--bad); border-color: var(--bad); background: var(--bad-bg); }
