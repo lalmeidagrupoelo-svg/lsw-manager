@@ -530,7 +530,7 @@ Premissas:
 - [ ] F2 — gerador de dados fictícios
 - [ ] F3 — Manager: usuários (escolher itens da 5.2), configurações, menu e tela inicial
 - [ ] F4 — Controle de Quadro
-- [ ] F5 — Estúdio (prioridade): E1 Transformar dados ✅ 12/11/2026 · E2 editor de M ✅ 12/11/2026 · E3 mesclar/acrescentar/agrupar ✅ 13/11/2026 · E4 relacionamentos ✅ 13/11/2026 · E5 central de funções ✅ 13/11/2026 · E6 leitor de fórmulas · Medidas e Relatórios (detalhe em `apps/estudio/CLAUDE.md`)
+- [ ] F5 — Estúdio (prioridade): E1 Transformar dados ✅ 12/11/2026 · E2 editor de M ✅ 12/11/2026 · E3 mesclar/acrescentar/agrupar ✅ 13/11/2026 · E4 relacionamentos ✅ 13/11/2026 · E5 central de funções ✅ 13/11/2026 · E6 leitor de fórmulas ✅ 13/11/2026 · Medidas e Relatórios (detalhe em `apps/estudio/CLAUDE.md`)
 - [ ] F6 — Painel de Dashboards e relatório de Ociosidade e Rigidez
 - [ ] F7 — Tickets
 - [ ] F8 — Intrahora
@@ -546,6 +546,7 @@ Premissas:
 ## 18. Histórico
 
 - 11/11/2026 — v1: plano criado; endereço lsw-manager.vercel.app; dados fictícios obrigatórios; conta plangrupoelo fora do projeto.
+- 13/11/2026 — Estúdio E6 entregue: Leitor de fórmulas (português, passo a passo com valores, árvore, consulta inteira).
 - 13/11/2026 — Estúdio E5 entregue: Central de funções M e DAX (janela com grupos, busca, Experimente). Preferências de tela registradas: faixa com abas, botões que abrem janelas, modo foco, tela cheia, janelas maximizáveis.
 - 13/11/2026 — Estúdio E4 entregue: Modelo e relacionamentos (cartões, linhas 1/∗, arrastar coluna, detectar, direção do filtro, ativa/inativa, Explorar dados conferido com o Agrupar da E3).
 - 13/11/2026 — Estúdio E3 entregue: Mesclar consultas (6 junções), Acrescentar e Agrupar por; importação remove espaços sobrando; filtro com um conector por nível e grupos.

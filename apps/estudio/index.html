@@ -30,7 +30,7 @@
     <button class="nav-item" type="button" disabled title="Vem do Estúdio atual">Medidas DAX <em>em breve</em></button>
     <div class="nav-grupo">Ajuda</div>
     <button class="nav-item" type="button" data-ferr="central" title="Abre a central de funções">Funções M e DAX <em>janela</em></button>
-    <button class="nav-item" type="button" disabled title="Depois do Power Query">Leitor de fórmulas <em>E6</em></button>
+    <button class="nav-item" type="button" data-ferr="leitor" title="Explica uma fórmula em português">Leitor de fórmulas <em>janela</em></button>
 
     <div class="lateral-rodape">
       <label for="tema">Tema
@@ -113,6 +113,7 @@
         </div><span>Código</span></div>
         <div class="faixa-grupo"><div>
           <button class="ferr" type="button" data-ferr="central"><b>?</b>Central de funções</button>
+          <button class="ferr" type="button" data-ferr="leitor"><b>¶</b>Leitor de fórmulas</button>
         </div><span>Ajuda</span></div>
         <div class="faixa-grupo"><div>
           <button class="ferr" type="button" data-acao-tela="foco"><b>◧</b>Modo foco</button>
@@ -134,6 +135,7 @@
           <div class="formula" id="barra-formula">
             <span class="fx">fx</span>
             <textarea id="formula" rows="1" spellcheck="false" aria-label="Fórmula M da etapa selecionada (clique para editar)" title="Clique para editar a etapa em M. Enter aplica, Esc cancela."></textarea>
+            <button type="button" class="btn peq" id="formula-ler" hidden title="Explicar esta fórmula em português">¶ Ler</button>
             <span class="formula-acoes" id="formula-acoes" hidden>
               <button type="button" class="btn peq prim" id="formula-ok" title="Aplicar (Enter)">✓</button>
               <button type="button" class="btn peq" id="formula-cancelar" title="Cancelar (Esc)">✕</button>
@@ -241,5 +243,7 @@
 <script src="./js/modelo-motor.js"></script>
 <script src="./js/modelo.js"></script>
 <script src="./js/central-funcoes.js"></script>
+<script src="./js/leitor-motor.js"></script>
+<script src="./js/leitor.js"></script>
 </body>
 </html>

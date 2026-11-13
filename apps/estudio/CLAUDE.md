@@ -24,9 +24,12 @@ Ferramenta para **montar bases e relatórios** no estilo Power BI, dentro do nav
 | `js/estudio.js` | Tela: desenha, abre as janelas das ferramentas e liga tudo ao motor |
 | `js/modelo-motor.js` | **Motor do modelo** (E4): analisar relação (cardinalidade, % de correspondência, tipos), sugerir relações, situação (quebrada), caminho pelas relações ativas e `consultarModelo` (agrupa e resume passando pelas relações) |
 | `js/central-funcoes.js` | Central de funções (E5): janela grande com abas M/DAX, grupos, busca, detalhe (sintaxe, Excel, exemplo, onde fica, "Abrir agora") e "Experimente" com a primeira linha da consulta aberta. Catálogo = `FUNCOES_M` + `AGREGACOES` + `ETAPAS_AJUDA` + `DAX_AJUDA` |
+| `js/leitor-motor.js` | Leitor de fórmulas (E6): `escrever` (árvore → M), `frase` (português), `passos` (ordem da conta com valores), `lerConsulta` (uma frase por etapa) |
+| `js/leitor.js` | Janela do Leitor: abas Em português · Passo a passo · Árvore · A consulta inteira; linha ‹ › para trocar os valores; abre pelo menu, pela aba Exibir e pelo botão "¶ Ler" da barra fx |
 | `js/modelo.js` | Tela Modelo e relacionamentos: cartões arrastáveis, linhas 1/∗ em SVG, criar por arrasto ou janela, detectar, editar/ativar/excluir, Explorar dados |
 | `dados-demo/gerar.js` | Gera `atendimentos.csv`, `quadro.csv` e `exemplos.js` (fictícios, semente fixa) |
 | `testes/motor.test.js` | Testes do motor M: `node apps/estudio/testes/motor.test.js` |
+| `testes/leitor.test.js` | Testes do leitor: `node apps/estudio/testes/leitor.test.js` |
 | `testes/modelo.test.js` | Testes do modelo: `node apps/estudio/testes/modelo.test.js` |
 
 ## Como o motor funciona
@@ -84,11 +87,12 @@ Ferramenta para **montar bases e relatórios** no estilo Power BI, dentro do nav
 - [x] **E3** — Mesclar (6 junções, várias chaves, prévia de % de correspondência; colunas a trazer com nome final editável, prefixo opcional desligado, ✎ na etapa Expandido para mudar depois), Acrescentar e Agrupar (13/11/2026). Importação já cria a etapa Espaços Removidos.
 - [x] **E4** — Modelo e relacionamentos (13/11/2026): cartões, linhas 1/∗, criar arrastando coluna, detectar, validação ao vivo, direção do filtro, ativa/inativa, Explorar dados. O DAX passa a usar o modelo quando as Medidas vierem.
 - [x] **E5** — Central de funções M e DAX (13/11/2026), mais faixa com abas, modo foco, tela cheia e janelas maximizáveis
-- [ ] **E6** — Leitor de fórmulas
+- [x] **E6** — Leitor de fórmulas (13/11/2026): frase em português, passo a passo com valores por linha, árvore e a consulta inteira explicada
 - [ ] Trazer Relatórios e Medidas DAX do Estúdio do DashBI
 
 ## Como testar localmente
 
 1. `node apps/estudio/testes/motor.test.js` — deve terminar com "15 testes passaram."
 2. `node apps/estudio/testes/modelo.test.js` — deve terminar com "6 testes passaram."
-3. Abrir `apps/estudio/index.html` com o Live Server (ou `python3 -m http.server` dentro de `apps/estudio`).
+3. `node apps/estudio/testes/leitor.test.js` — deve terminar com "4 testes passaram."
+4. Abrir `apps/estudio/index.html` com o Live Server (ou `python3 -m http.server` dentro de `apps/estudio`).

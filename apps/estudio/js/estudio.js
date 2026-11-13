@@ -191,6 +191,8 @@ function ajustarAlturaFormula() { const f = $('formula'); f.style.height = 'auto
 function mostrarFormula(texto) {
   if (ui.editandoFormula) return; // não apaga o que a pessoa está digitando
   $('formula').value = texto; $('formula').disabled = !texto;
+  const c = atual(); const e = c && c.etapas[indiceEtapa()];
+  $('formula-ler').hidden = !(e && e.expr); // só filtros e colunas personalizadas têm fórmula para ler
   $('formula-erro').hidden = true; $('formula-acoes').hidden = true;
   ajustarAlturaFormula();
 }
@@ -1001,6 +1003,7 @@ function ferramenta(nome) {
   ui.editandoFormula = false;
   if (nome === 'nova') return janelaNova();
   if (nome === 'central') return janelaCentral();
+  if (nome === 'leitor') return janelaLeitor();
   if (nome === 'codigo') { ui.codigoAberto = !ui.codigoAberto; if (!ui.codigoAberto) ui.editandoCodigo = false; return render(); }
   if (nome === 'editor') { if (ui.editandoCodigo) { ui.editandoCodigo = false; return render(); } return abrirEditorAvancado(); }
   const res = resultadoAtual();
@@ -1098,6 +1101,7 @@ $('formula-ok').addEventListener('click', aplicarFormula);
 $('formula-cancelar').addEventListener('mousedown', ev => ev.preventDefault());
 $('formula-cancelar').addEventListener('click', cancelarFormula);
 $('btn-editar-codigo').addEventListener('click', abrirEditorAvancado);
+$('formula-ler').addEventListener('click', () => { const c = atual(); const i = indiceEtapa(); const e = c.etapas[i]; janelaLeitor({ expr: e.expr, origem: e.nome, indice: i }); });
 $('btn-aplicar-codigo').addEventListener('click', aplicarCodigo);
 $('btn-cancelar-codigo').addEventListener('click', () => { ui.editandoCodigo = false; render(); });
 $('codigo-edicao').addEventListener('keydown', ev => {
