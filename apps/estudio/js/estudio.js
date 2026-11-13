@@ -290,7 +290,7 @@ function abrirMenuColuna(k, botao) {
 }
 
 /* ---------------- 5. janelas das ferramentas ---------------- */
-function abrirJanela({ titulo, corpo, ok = 'Aplicar', largo = false, semOk = false, aoAbrir, aoConfirmar }) {
+function abrirJanela({ titulo, corpo, ok = 'Aplicar', largo = false, semOk = false, cheia = false, aoAbrir, aoConfirmar }) {
   fecharMenuColuna();
   $('modal-titulo').textContent = titulo;
   // Troca o corpo por um elemento novo: assim os "ouvintes" da janela anterior não sobram
@@ -301,6 +301,7 @@ function abrirJanela({ titulo, corpo, ok = 'Aplicar', largo = false, semOk = fal
   $('modal-ok').hidden = semOk;
   $('modal-cancelar').textContent = semOk ? 'Fechar' : 'Cancelar';
   $('modal-caixa').classList.toggle('largo', largo);
+  $('modal-caixa').classList.toggle('cheia', cheia);
   ui.aoConfirmar = aoConfirmar || null;
   $('modal').hidden = false;
   if (aoAbrir) aoAbrir();
@@ -999,6 +1000,7 @@ function excluirConsulta(id) {
 function ferramenta(nome) {
   ui.editandoFormula = false;
   if (nome === 'nova') return janelaNova();
+  if (nome === 'central') return janelaCentral();
   if (nome === 'codigo') { ui.codigoAberto = !ui.codigoAberto; if (!ui.codigoAberto) ui.editandoCodigo = false; return render(); }
   if (nome === 'editor') { if (ui.editandoCodigo) { ui.editandoCodigo = false; return render(); } return abrirEditorAvancado(); }
   const res = resultadoAtual();
@@ -1034,6 +1036,36 @@ window.addEventListener('resize', fecharMenuColuna);
 $('modal-ok').addEventListener('click', confirmarJanela);
 $('modal-cancelar').addEventListener('click', fecharJanela);
 $('modal-x').addEventListener('click', fecharJanela);
+$('modal-max').addEventListener('click', () => $('modal-caixa').classList.toggle('cheia'));
+
+/* ---------------- faixa com abas (como no Office e no Power BI) ---------------- */
+// Cada aba mostra só o seu painel. Dois cliques numa aba (ou o ⌃) recolhem a faixa.
+document.querySelectorAll('.faixa-com-abas').forEach(faixa => {
+  const mostrar = aba => {
+    faixa.querySelectorAll('[data-aba]').forEach(b => { b.classList.toggle('on', b.dataset.aba === aba); b.setAttribute('aria-selected', b.dataset.aba === aba); });
+    faixa.querySelectorAll('[data-painel]').forEach(p => { p.hidden = p.dataset.painel !== aba; });
+  };
+  faixa.addEventListener('click', ev => {
+    const b = ev.target.closest('[data-aba]');
+    if (b) { if (faixa.classList.contains('recolhida')) faixa.classList.remove('recolhida'); return mostrar(b.dataset.aba); }
+    if (ev.target.closest('[data-recolher]')) faixa.classList.toggle('recolhida');
+  });
+  faixa.addEventListener('dblclick', ev => { if (ev.target.closest('[data-aba]')) faixa.classList.toggle('recolhida'); });
+});
+
+/* ---------------- modo foco e tela cheia ---------------- */
+function alternarFoco() { document.body.classList.toggle('foco'); if (ui.tela === 'modelo' && typeof desenharLinhas === 'function') setTimeout(desenharLinhas, 0); }
+async function alternarTelaCheia() {
+  if (document.fullscreenElement) { await document.exitFullscreen().catch(() => {}); return; }
+  try { await document.documentElement.requestFullscreen(); document.body.classList.add('tela-cheia'); }
+  catch { document.body.classList.toggle('tela-cheia'); aviso('O navegador não liberou a tela cheia aqui. Recolhi o menu lateral; use F11 para ocupar a tela toda.', 'ok', 5000); }
+  if (ui.tela === 'modelo' && typeof desenharLinhas === 'function') setTimeout(desenharLinhas, 50);
+}
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) document.body.classList.remove('tela-cheia'); if (ui.tela === 'modelo' && typeof desenharLinhas === 'function') setTimeout(desenharLinhas, 50); });
+document.addEventListener('click', ev => {
+  const a = ev.target.closest('[data-acao-tela]'); if (!a) return;
+  if (a.dataset.acaoTela === 'foco') alternarFoco(); else alternarTelaCheia();
+});
 $('modal-caixa').addEventListener('keydown', ev => { if (ev.key === 'Enter' && ev.target.matches('input[type=text]') && !$('modal-ok').hidden) { ev.preventDefault(); confirmarJanela(); } });
 $('nome-consulta').addEventListener('change', ev => {
   const c = atual(); if (!c) return;

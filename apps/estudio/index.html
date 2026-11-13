@@ -29,7 +29,7 @@
     <button class="nav-item" type="button" disabled title="Vem do Estúdio atual">Relatórios <em>em breve</em></button>
     <button class="nav-item" type="button" disabled title="Vem do Estúdio atual">Medidas DAX <em>em breve</em></button>
     <div class="nav-grupo">Ajuda</div>
-    <button class="nav-item" type="button" disabled title="Etapa E5">Funções M e DAX <em>E5</em></button>
+    <button class="nav-item" type="button" data-ferr="central" title="Abre a central de funções">Funções M e DAX <em>janela</em></button>
     <button class="nav-item" type="button" disabled title="Depois do Power Query">Leitor de fórmulas <em>E6</em></button>
 
     <div class="lateral-rodape">
@@ -56,37 +56,69 @@
     <header class="topo">
       <h1 id="titulo-tela">Transformar dados</h1>
       <span class="salvo" id="status-salvo">Salvo no navegador</span>
+      <button class="btn peq" type="button" data-acao-tela="foco" title="Esconde o menu e os painéis laterais">◧ Modo foco</button>
+      <button class="btn peq" type="button" data-acao-tela="cheia" title="Tela cheia (Esc sai)">⛶ Tela cheia</button>
       <button class="btn peq" type="button" id="btn-zerar" title="Volta às consultas de exemplo">Zerar dados</button>
     </header>
 
     <!-- 3. FAIXA DE FERRAMENTAS -->
-    <div class="faixa" role="toolbar" aria-label="Ferramentas">
-      <div class="faixa-grupo"><div>
-        <button class="ferr principal-acao" type="button" data-ferr="nova"><b>+</b>Nova consulta</button>
-      </div><span>Consulta</span></div>
-      <div class="faixa-grupo"><div>
-        <button class="ferr" type="button" data-ferr="escolher" data-precisa-tabela><b>☰✓</b>Escolher colunas</button>
-        <button class="ferr" type="button" data-ferr="remover" data-precisa-tabela><b>☰✕</b>Remover colunas</button>
-      </div><span>Gerenciar colunas</span></div>
-      <div class="faixa-grupo"><div>
-        <button class="ferr" type="button" data-ferr="filtrar" data-precisa-tabela><b>▽</b>Filtrar linhas</button>
-      </div><span>Reduzir linhas</span></div>
-      <div class="faixa-grupo"><div>
-        <button class="ferr" type="button" data-ferr="tipos" data-precisa-tabela><b>1.2</b>Tipo de dados</button>
-        <button class="ferr" type="button" data-ferr="renomear" data-precisa-tabela><b>Aa</b>Renomear</button>
-        <button class="ferr" type="button" data-ferr="agrupar" data-precisa-tabela><b>Σ</b>Agrupar por</button>
-      </div><span>Transformar</span></div>
-      <div class="faixa-grupo"><div>
-        <button class="ferr" type="button" data-ferr="mesclar" data-precisa-tabela><b>⋈</b>Mesclar consultas</button>
-        <button class="ferr" type="button" data-ferr="acrescentar" data-precisa-tabela><b>⊕</b>Acrescentar consultas</button>
-      </div><span>Combinar</span></div>
-      <div class="faixa-grupo"><div>
-        <button class="ferr" type="button" data-ferr="adicionar" data-precisa-tabela><b>fx</b>Coluna personalizada</button>
-      </div><span>Adicionar coluna</span></div>
-      <div class="faixa-grupo"><div>
-        <button class="ferr" type="button" data-ferr="codigo" id="ferr-codigo"><b>M</b>Código M</button>
-        <button class="ferr" type="button" data-ferr="editor" id="ferr-editor"><b>{ }</b>Editor avançado</button>
-      </div><span>Exibir</span></div>
+    <div class="faixa faixa-com-abas" role="toolbar" aria-label="Ferramentas">
+      <div class="faixa-abas" role="tablist">
+        <button type="button" class="on" data-aba="inicio">Página inicial</button>
+        <button type="button" data-aba="transformar">Transformar</button>
+        <button type="button" data-aba="adicionar">Adicionar coluna</button>
+        <button type="button" data-aba="combinar">Combinar</button>
+        <button type="button" data-aba="exibir">Exibir</button>
+        <button type="button" class="faixa-recolher" data-recolher title="Recolher ou abrir a faixa (ou dê dois cliques numa aba)" aria-label="Recolher a faixa">⌃</button>
+      </div>
+      <div class="faixa-painel" data-painel="inicio">
+        <div class="faixa-grupo"><div>
+          <button class="ferr principal-acao" type="button" data-ferr="nova"><b>+</b>Nova consulta</button>
+        </div><span>Consulta</span></div>
+        <div class="faixa-grupo"><div>
+          <button class="ferr" type="button" data-ferr="escolher" data-precisa-tabela><b>☰✓</b>Escolher colunas</button>
+          <button class="ferr" type="button" data-ferr="remover" data-precisa-tabela><b>☰✕</b>Remover colunas</button>
+        </div><span>Gerenciar colunas</span></div>
+        <div class="faixa-grupo"><div>
+          <button class="ferr" type="button" data-ferr="filtrar" data-precisa-tabela><b>▽</b>Filtrar linhas</button>
+        </div><span>Reduzir linhas</span></div>
+      </div>
+      <div class="faixa-painel" data-painel="transformar" hidden>
+        <div class="faixa-grupo"><div>
+          <button class="ferr" type="button" data-ferr="tipos" data-precisa-tabela><b>1.2</b>Tipo de dados</button>
+          <button class="ferr" type="button" data-ferr="renomear" data-precisa-tabela><b>Aa</b>Renomear</button>
+        </div><span>Colunas</span></div>
+        <div class="faixa-grupo"><div>
+          <button class="ferr" type="button" data-ferr="agrupar" data-precisa-tabela><b>Σ</b>Agrupar por</button>
+        </div><span>Tabela</span></div>
+      </div>
+      <div class="faixa-painel" data-painel="adicionar" hidden>
+        <div class="faixa-grupo"><div>
+          <button class="ferr" type="button" data-ferr="adicionar" data-precisa-tabela><b>fx</b>Coluna personalizada</button>
+        </div><span>Geral</span></div>
+        <div class="faixa-grupo"><div>
+          <button class="ferr" type="button" data-ferr="central"><b>?</b>Ver funções</button>
+        </div><span>Ajuda</span></div>
+      </div>
+      <div class="faixa-painel" data-painel="combinar" hidden>
+        <div class="faixa-grupo"><div>
+          <button class="ferr" type="button" data-ferr="mesclar" data-precisa-tabela><b>⋈</b>Mesclar consultas</button>
+          <button class="ferr" type="button" data-ferr="acrescentar" data-precisa-tabela><b>⊕</b>Acrescentar consultas</button>
+        </div><span>Combinar</span></div>
+      </div>
+      <div class="faixa-painel" data-painel="exibir" hidden>
+        <div class="faixa-grupo"><div>
+          <button class="ferr" type="button" data-ferr="codigo" id="ferr-codigo"><b>M</b>Código M</button>
+          <button class="ferr" type="button" data-ferr="editor" id="ferr-editor"><b>{ }</b>Editor avançado</button>
+        </div><span>Código</span></div>
+        <div class="faixa-grupo"><div>
+          <button class="ferr" type="button" data-ferr="central"><b>?</b>Central de funções</button>
+        </div><span>Ajuda</span></div>
+        <div class="faixa-grupo"><div>
+          <button class="ferr" type="button" data-acao-tela="foco"><b>◧</b>Modo foco</button>
+          <button class="ferr" type="button" data-acao-tela="cheia"><b>⛶</b>Tela cheia</button>
+        </div><span>Tela</span></div>
+      </div>
     </div>
 
     <!-- 4. EDITOR -->
@@ -147,17 +179,33 @@
 
     <!-- 7. MODELO E RELACIONAMENTOS (E4): cartões das consultas ligados pelas colunas-chave -->
     <section class="tela-modelo" id="tela-modelo" hidden aria-label="Modelo e relacionamentos">
-      <div class="faixa" role="toolbar" aria-label="Ferramentas do modelo">
-        <div class="faixa-grupo"><div>
-          <button class="ferr principal-acao" type="button" data-modelo="nova"><b>+</b>Novo relacionamento</button>
-          <button class="ferr" type="button" data-modelo="detectar"><b>⌕</b>Detectar relacionamentos</button>
-        </div><span>Relacionamentos</span></div>
-        <div class="faixa-grupo"><div>
-          <button class="ferr" type="button" data-modelo="organizar"><b>▦</b>Organizar cartões</button>
-        </div><span>Exibir</span></div>
-        <div class="faixa-grupo"><div>
-          <button class="ferr" type="button" data-modelo="explorar"><b>Σ</b>Explorar dados</button>
-        </div><span>Testar o modelo</span></div>
+      <div class="faixa faixa-com-abas" role="toolbar" aria-label="Ferramentas do modelo">
+        <div class="faixa-abas" role="tablist">
+          <button type="button" class="on" data-aba="inicio">Página inicial</button>
+          <button type="button" data-aba="testar">Testar o modelo</button>
+          <button type="button" data-aba="exibir">Exibir</button>
+          <button type="button" class="faixa-recolher" data-recolher title="Recolher ou abrir a faixa (ou dê dois cliques numa aba)" aria-label="Recolher a faixa">⌃</button>
+        </div>
+        <div class="faixa-painel" data-painel="inicio">
+          <div class="faixa-grupo"><div>
+            <button class="ferr principal-acao" type="button" data-modelo="nova"><b>+</b>Novo relacionamento</button>
+            <button class="ferr" type="button" data-modelo="detectar"><b>⌕</b>Detectar relacionamentos</button>
+          </div><span>Relacionamentos</span></div>
+        </div>
+        <div class="faixa-painel" data-painel="testar" hidden>
+          <div class="faixa-grupo"><div>
+            <button class="ferr" type="button" data-modelo="explorar"><b>Σ</b>Explorar dados</button>
+          </div><span>Testar</span></div>
+        </div>
+        <div class="faixa-painel" data-painel="exibir" hidden>
+          <div class="faixa-grupo"><div>
+            <button class="ferr" type="button" data-modelo="organizar"><b>▦</b>Organizar cartões</button>
+          </div><span>Cartões</span></div>
+          <div class="faixa-grupo"><div>
+            <button class="ferr" type="button" data-acao-tela="foco"><b>◧</b>Modo foco</button>
+            <button class="ferr" type="button" data-acao-tela="cheia"><b>⛶</b>Tela cheia</button>
+          </div><span>Tela</span></div>
+        </div>
       </div>
       <div class="modelo-corpo">
         <div class="modelo-area" id="modelo-area"><div class="modelo-tela" id="modelo-tela"></div></div>
@@ -175,7 +223,7 @@
 <!-- 6. JANELA (modal) e AVISOS -->
 <div class="modal-fundo" id="modal" hidden>
   <div class="modal" id="modal-caixa" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
-    <header><h2 id="modal-titulo"></h2><button class="fechar" type="button" id="modal-x" aria-label="Fechar">×</button></header>
+    <header><h2 id="modal-titulo"></h2><button class="fechar maximizar" type="button" id="modal-max" title="Aumentar ou diminuir a janela" aria-label="Aumentar a janela">⤢</button><button class="fechar" type="button" id="modal-x" aria-label="Fechar">×</button></header>
     <div class="corpo" id="modal-corpo"></div>
     <footer>
       <span class="msg" id="modal-msg" role="alert"></span>
@@ -192,5 +240,6 @@
 <script src="./js/estudio.js"></script>
 <script src="./js/modelo-motor.js"></script>
 <script src="./js/modelo.js"></script>
+<script src="./js/central-funcoes.js"></script>
 </body>
 </html>

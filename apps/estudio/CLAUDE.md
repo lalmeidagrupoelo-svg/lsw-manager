@@ -23,6 +23,7 @@ Ferramenta para **montar bases e relatórios** no estilo Power BI, dentro do nav
 | `js/armazenamento.js` | Única porta para salvar/ler consultas. Hoje `localStorage`; na F15 passa a chamar a API (Neon) sem mudar a tela |
 | `js/estudio.js` | Tela: desenha, abre as janelas das ferramentas e liga tudo ao motor |
 | `js/modelo-motor.js` | **Motor do modelo** (E4): analisar relação (cardinalidade, % de correspondência, tipos), sugerir relações, situação (quebrada), caminho pelas relações ativas e `consultarModelo` (agrupa e resume passando pelas relações) |
+| `js/central-funcoes.js` | Central de funções (E5): janela grande com abas M/DAX, grupos, busca, detalhe (sintaxe, Excel, exemplo, onde fica, "Abrir agora") e "Experimente" com a primeira linha da consulta aberta. Catálogo = `FUNCOES_M` + `AGREGACOES` + `ETAPAS_AJUDA` + `DAX_AJUDA` |
 | `js/modelo.js` | Tela Modelo e relacionamentos: cartões arrastáveis, linhas 1/∗ em SVG, criar por arrasto ou janela, detectar, editar/ativar/excluir, Explorar dados |
 | `dados-demo/gerar.js` | Gera `atendimentos.csv`, `quadro.csv` e `exemplos.js` (fictícios, semente fixa) |
 | `testes/motor.test.js` | Testes do motor M: `node apps/estudio/testes/motor.test.js` |
@@ -69,6 +70,12 @@ Ferramenta para **montar bases e relatórios** no estilo Power BI, dentro do nav
 
 **Por que JavaScript e não DuckDB nesta etapa:** abre na hora, sem baixar ~30 MB, roda nos testes do Node e cobre bem as bases da demonstração (milhares de linhas). O Estúdio do DashBI usa DuckDB para bases grandes; quando as bases do Neon chegarem, o executor de cada etapa pode passar a gerar SQL sem mudar o catálogo nem a tela.
 
+## Preferências de tela do Leandro (seguir em tudo daqui em diante)
+
+- **Botões que abrem janelas (modais), menus que abrem seções, grupos que mostram só o que é deles** — como as faixas do Office e do Power BI. Evitar tudo na tela ao mesmo tempo.
+- **Faixa com abas** (`.faixa-com-abas`): cada aba mostra só o seu painel; dois cliques numa aba ou o ⌃ recolhem a faixa.
+- **Tela cheia** (Fullscreen; se o navegador negar, recolhe o menu lateral) e **Modo foco** (esconde menu e painéis laterais). Toda janela tem **⤢ maximizar**; janelas grandes podem abrir já maximizadas (`abrirJanela({ cheia: true })`).
+
 ## Etapas do Estúdio (pendências do módulo)
 
 - [x] **E1** — Transformar dados: 6 ferramentas, etapas aplicadas, prévia por etapa, qualidade da coluna, código M só leitura (12/11/2026)
@@ -76,7 +83,7 @@ Ferramenta para **montar bases e relatórios** no estilo Power BI, dentro do nav
 - [ ] Editar etapa pela janela da ferramenta (engrenagem), com o formulário já preenchido
 - [x] **E3** — Mesclar (6 junções, várias chaves, prévia de % de correspondência; colunas a trazer com nome final editável, prefixo opcional desligado, ✎ na etapa Expandido para mudar depois), Acrescentar e Agrupar (13/11/2026). Importação já cria a etapa Espaços Removidos.
 - [x] **E4** — Modelo e relacionamentos (13/11/2026): cartões, linhas 1/∗, criar arrastando coluna, detectar, validação ao vivo, direção do filtro, ativa/inativa, Explorar dados. O DAX passa a usar o modelo quando as Medidas vierem.
-- [ ] **E5** — Central de funções M e DAX
+- [x] **E5** — Central de funções M e DAX (13/11/2026), mais faixa com abas, modo foco, tela cheia e janelas maximizáveis
 - [ ] **E6** — Leitor de fórmulas
 - [ ] Trazer Relatórios e Medidas DAX do Estúdio do DashBI
 
