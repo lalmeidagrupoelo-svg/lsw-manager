@@ -42,7 +42,15 @@ const ui = {
   editandoFormula: false, // barra fx em edição
   msgCelula: '',     // mensagem do "Error" clicado na grade
   aoConfirmar: null, // função do botão principal da janela aberta
+  tela: 'consultas', // 'consultas' (Transformar dados) ou 'modelo' (Modelo e relacionamentos)
+  modelo: { relacionamentos: [], posicoes: {} }, // relações entre consultas e lugar de cada cartão
 };
+// Modelo inicial da demonstração: atendimentos[MATRICULA] * — 1 quadro[MATRICULA]
+function modeloPadrao() {
+  const nomes = ui.consultas.map(c => c.nome);
+  return { posicoes: {}, relacionamentos: nomes.includes('atendimentos') && nomes.includes('quadro')
+    ? [{ id: 'r1', de: { consulta: 'atendimentos', coluna: 'MATRICULA' }, para: { consulta: 'quadro', coluna: 'MATRICULA' }, cardinalidade: 'N:1', direcao: 'unica', ativo: true }] : [] };
+}
 const atual = () => ui.consultas.find(c => c.id === ui.sel) || null;
 function indiceEtapa() {
   const c = atual(); if (!c) return -1;
@@ -53,7 +61,7 @@ const exec = (c, ate) => M.executar(c, ate, ui.consultas);
 const resultadoAtual = () => { const c = atual(); return c ? exec(c, indiceEtapa()) : null; };
 
 async function salvar() {
-  const r = await Armazenamento.salvar({ versao: 1, consultas: ui.consultas, sel: ui.sel });
+  const r = await Armazenamento.salvar({ versao: 1, consultas: ui.consultas, sel: ui.sel, modelo: ui.modelo });
   $('status-salvo').textContent = r.ok ? `Salvo no navegador às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'Não salvo';
   if (!r.ok) aviso(r.erro, 'erro');
 }
@@ -77,6 +85,12 @@ function consultasDeExemplo() {
 
 /* ---------------- 3. desenhar a tela ---------------- */
 function render() {
+  const modelo = ui.tela === 'modelo';
+  document.querySelector('.principal').classList.toggle('modo-modelo', modelo);
+  $('tela-modelo').hidden = !modelo;
+  $('titulo-tela').textContent = modelo ? 'Modelo e relacionamentos' : 'Transformar dados';
+  document.querySelectorAll('[data-tela]').forEach(b => b.classList.toggle('on', b.dataset.tela === ui.tela));
+  if (modelo) { if (typeof renderModelo === 'function') renderModelo(); return; }
   renderConsultas();
   renderEtapas();
   renderCentro();
@@ -976,6 +990,8 @@ function excluirConsulta(id) {
   const usadaPor = consultasQueUsam(c.nome);
   confirmar('Excluir consulta', `Excluir a consulta <b>${esc(c.nome)}</b> e todas as suas etapas?${usadaPor.length ? `<br><br>Atenção: ela é usada por <b>${usadaPor.map(esc).join(', ')}</b>, que vai(ão) ficar com erro.` : ''}`, 'Excluir', () => {
     ui.consultas = ui.consultas.filter(x => x.id !== id);
+    ui.modelo.relacionamentos = ui.modelo.relacionamentos.filter(r => r.de.consulta !== c.nome && r.para.consulta !== c.nome);
+    delete ui.modelo.posicoes[c.nome];
     if (ui.sel === id) { ui.sel = ui.consultas[0] ? ui.consultas[0].id : null; ui.etapaSel = null; }
     salvar(); render(); aviso(`Consulta "${c.nome}" excluída.`);
   });
@@ -1000,6 +1016,7 @@ function ferramenta(nome) {
 /* ---------------- 7. início ---------------- */
 document.addEventListener('click', ev => {
   const alvo = ev.target;
+  const tl = alvo.closest('[data-tela]'); if (tl) { ui.tela = tl.dataset.tela; fecharMenuColuna(); return render(); }
   if (!alvo.closest('.menu-col') && !alvo.closest('[data-coluna]')) fecharMenuColuna();
   const f = alvo.closest('[data-ferr]'); if (f && !f.disabled) return ferramenta(f.dataset.ferr);
   const x1 = alvo.closest('[data-excluir-consulta]'); if (x1) { ev.stopPropagation(); return excluirConsulta(x1.dataset.excluirConsulta); }
@@ -1024,6 +1041,8 @@ $('nome-consulta').addEventListener('change', ev => {
   if (!novo) { ev.target.value = c.nome; return aviso('O nome da consulta não pode ficar vazio.', 'erro'); }
   if (novo !== c.nome && ui.consultas.some(x => x.nome === novo)) { ev.target.value = c.nome; return aviso(`Já existe uma consulta chamada "${novo}".`, 'erro'); }
   const antigo = c.nome; c.nome = novo;
+  ui.modelo.relacionamentos.forEach(r => { [r.de, r.para].forEach(l => { if (l.consulta === antigo) l.consulta = novo; }); });
+  if (ui.modelo.posicoes[antigo]) { ui.modelo.posicoes[novo] = ui.modelo.posicoes[antigo]; delete ui.modelo.posicoes[antigo]; }
   let trocas = 0;
   ui.consultas.forEach(q => q.etapas.forEach(e => {
     if (e.consulta === antigo) { e.consulta = novo; trocas++; }
@@ -1062,6 +1081,7 @@ $('btn-copiar').addEventListener('click', () => {
 $('btn-zerar').addEventListener('click', () => confirmar('Zerar dados', 'Voltar às consultas de exemplo? As consultas e etapas criadas aqui serão apagadas deste navegador.', 'Zerar', async () => {
   await Armazenamento.zerar();
   ui.consultas = consultasDeExemplo(); ui.sel = ui.consultas[0] ? ui.consultas[0].id : null; ui.etapaSel = null;
+  ui.modelo = modeloPadrao();
   await salvar(); render(); aviso('Dados de exemplo restaurados.');
 }));
 $('tema').addEventListener('change', ev => salvarPref('tema', ev.target.value));
@@ -1082,6 +1102,7 @@ $('fonte-mais').addEventListener('click', () => salvarPref('fonte', Math.min(15,
     });
   }
   else { ui.consultas = consultasDeExemplo(); ui.sel = ui.consultas[0] ? ui.consultas[0].id : null; }
+  ui.modelo = salvo && salvo.modelo ? salvo.modelo : modeloPadrao();
   if (!atual() && ui.consultas[0]) ui.sel = ui.consultas[0].id;
   render();
 })();

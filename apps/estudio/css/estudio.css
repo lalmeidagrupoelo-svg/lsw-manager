@@ -272,3 +272,69 @@ select.cond-junta { color: var(--link); padding: 7px 4px; }
   .cond [data-campo="op"], .cond [data-campo="val"] { grid-column: 2; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* =====================================================================
+   MODELO E RELACIONAMENTOS (E4): cartões das consultas e linhas entre colunas-chave
+   ===================================================================== */
+.principal.modo-modelo { grid-template-rows: auto minmax(0, 1fr); }
+.principal.modo-modelo > .faixa, .principal.modo-modelo > .editor, .principal.modo-modelo > .codigo { display: none; }
+.tela-modelo { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
+.modelo-corpo { display: grid; grid-template-columns: minmax(0, 1fr) 300px; min-height: 0; }
+.modelo-area { overflow: auto; min-height: 0; background:
+  radial-gradient(circle, var(--border) 1px, transparent 1.2px) 0 0 / 22px 22px, var(--bg); }
+.modelo-tela { position: relative; min-width: 100%; min-height: 100%; }
+.modelo-linhas { position: absolute; left: 0; top: 0; overflow: visible; z-index: 1; }
+.cartao-tab { position: absolute; z-index: 2; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 10px; box-shadow: 0 6px 18px rgba(0, 0, 0, .12); overflow: hidden; }
+.cartao-tab.arrastando { box-shadow: 0 14px 32px rgba(0, 0, 0, .28); z-index: 5; }
+.cartao-tab.com-erro { border-color: var(--bad); }
+.cartao-tab-topo { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 9px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); cursor: grab; user-select: none; touch-action: none; }
+.cartao-tab-topo b { font: 700 var(--fs-14) var(--f-titulo); }
+.cartao-tab-topo small { font: var(--fs-11) var(--f-mono); color: var(--muted); }
+.cartao-tab ul { list-style: none; margin: 0; padding: 4px 0; }
+.cartao-tab li { display: flex; align-items: center; gap: 8px; padding: 4px 12px; font-size: var(--fs-13); cursor: grab; }
+.cartao-tab li:hover { background: var(--surface-3); }
+.cartao-tab li.alvo { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.cartao-tab li .tipo { font: 700 var(--fs-10) var(--f-mono); color: var(--text-2); background: var(--surface-3); border-radius: 4px; padding: 1px 4px; min-width: 34px; text-align: center; }
+.cartao-tab li .nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chave-uso { font: 700 var(--fs-12) var(--f-mono); color: var(--link); }
+.cartao-erro { margin: 0; padding: 12px; font-size: var(--fs-12); color: var(--bad); }
+/* linhas */
+.rel .rel-linha { fill: none; stroke: var(--text-2); stroke-width: 1.8; }
+.rel .rel-toque { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
+.rel.inativa .rel-linha { stroke-dasharray: 6 5; stroke: var(--muted); }
+.rel.quebrada .rel-linha { stroke-dasharray: 3 4; stroke: var(--bad); }
+.rel.sel .rel-linha { stroke: var(--accent); stroke-width: 3; }
+.rel:hover .rel-linha { stroke: var(--link); }
+.rel-card { font: 700 var(--fs-13) var(--f-mono); fill: var(--text); }
+.rel-meio { fill: var(--surface); stroke: var(--border-strong); pointer-events: all; cursor: pointer; }
+.rel.sel .rel-meio { stroke: var(--accent); }
+.rel-seta { font: 700 var(--fs-11) var(--f-texto); fill: var(--text-2); pointer-events: none; }
+/* painel lateral */
+.modelo-lado { border-left: 1px solid var(--border); overflow-y: auto; }
+.modelo-lado .lista li .nome { white-space: normal; font-size: var(--fs-12); }
+.modelo-lado .lista li .nome b { font-family: var(--f-mono); color: var(--link); }
+.lista li.vazio-lista { cursor: default; color: var(--muted); font-size: var(--fs-12); white-space: normal; }
+.rel-ativa { color: var(--ok) !important; } .rel-inativa { color: var(--muted) !important; } .rel-quebrada { color: var(--bad) !important; }
+.detalhe-rel { margin: 4px 12px 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); display: grid; gap: 8px; font-size: var(--fs-12); }
+.detalhe-rel .rotulo { display: block; font: 600 var(--fs-10) var(--f-mono); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.chip-rel { font: 600 var(--fs-10) var(--f-texto); padding: 2px 7px; border-radius: 999px; }
+.chip-rel.ativa { color: var(--ok); background: var(--ok-bg); } .chip-rel.inativa { color: var(--warn); background: var(--warn-bg); } .chip-rel.quebrada { color: var(--bad); background: var(--bad-bg); }
+/* janela da relação */
+.rel-lados { display: grid; grid-template-columns: minmax(0, 1fr) 120px minmax(0, 1fr); gap: 12px; align-items: center; }
+.rel-lados select { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px; font-size: var(--fs-13); width: 100%; }
+.rel-liga { display: flex; align-items: center; gap: 6px; justify-content: center; font: 700 var(--fs-16) var(--f-mono); color: var(--link); }
+.rel-liga i { flex: 1; height: 2px; background: var(--text-2); }
+/* explorar */
+.val-linha { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) minmax(0, 1.2fr) 30px; gap: 8px; align-items: center; }
+.campo > .val-linha { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.val-linha select { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px; font-size: var(--fs-13); width: 100%; min-width: 0; }
+.val-linha select:disabled { opacity: .45; }
+.val-linha span { color: var(--muted); font-size: var(--fs-12); }
+.explorar-tabela { max-height: 320px; overflow: auto; margin-top: 6px; }
+.explorar-tabela table { border-collapse: collapse; width: 100%; font-size: var(--fs-13); font-variant-numeric: tabular-nums; }
+.explorar-tabela th, .explorar-tabela td { padding: 5px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+.explorar-tabela th { position: sticky; top: 0; background: var(--surface-2); font: 600 var(--fs-11) var(--f-mono); color: var(--muted); }
+.explorar-tabela td.num { text-align: right; }
+.explorar-tabela tfoot td { border-top: 2px solid var(--border-strong); }
+@media (max-width: 1100px) { .modelo-corpo { grid-template-columns: minmax(0, 1fr) 240px; } }
+@media (max-width: 820px) { .modelo-corpo { grid-template-columns: 1fr; grid-template-rows: minmax(360px, 1fr) auto; } .rel-lados { grid-template-columns: 1fr; } }

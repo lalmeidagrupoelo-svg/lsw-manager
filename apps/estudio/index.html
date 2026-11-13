@@ -23,8 +23,8 @@
   <aside class="lateral" aria-label="Menu do Estúdio">
     <div class="marca"><i>P</i><div>Estúdio<small>LSW Manager</small></div></div>
     <div class="nav-grupo">Dados</div>
-    <button class="nav-item on" type="button">Transformar dados</button>
-    <button class="nav-item" type="button" disabled title="Próxima etapa (E4)">Modelo e relacionamentos <em>E4</em></button>
+    <button class="nav-item on" type="button" data-tela="consultas">Transformar dados</button>
+    <button class="nav-item" type="button" data-tela="modelo">Modelo e relacionamentos</button>
     <div class="nav-grupo">Análise</div>
     <button class="nav-item" type="button" disabled title="Vem do Estúdio atual">Relatórios <em>em breve</em></button>
     <button class="nav-item" type="button" disabled title="Vem do Estúdio atual">Medidas DAX <em>em breve</em></button>
@@ -54,7 +54,7 @@
   <main class="principal">
     <!-- 2. TOPO -->
     <header class="topo">
-      <h1>Transformar dados</h1>
+      <h1 id="titulo-tela">Transformar dados</h1>
       <span class="salvo" id="status-salvo">Salvo no navegador</span>
       <button class="btn peq" type="button" id="btn-zerar" title="Volta às consultas de exemplo">Zerar dados</button>
     </header>
@@ -144,6 +144,31 @@
       <textarea id="codigo-edicao" spellcheck="false" aria-label="Código M da consulta" hidden></textarea>
       <div class="codigo-erro" id="codigo-erro" role="alert" hidden></div>
     </section>
+
+    <!-- 7. MODELO E RELACIONAMENTOS (E4): cartões das consultas ligados pelas colunas-chave -->
+    <section class="tela-modelo" id="tela-modelo" hidden aria-label="Modelo e relacionamentos">
+      <div class="faixa" role="toolbar" aria-label="Ferramentas do modelo">
+        <div class="faixa-grupo"><div>
+          <button class="ferr principal-acao" type="button" data-modelo="nova"><b>+</b>Novo relacionamento</button>
+          <button class="ferr" type="button" data-modelo="detectar"><b>⌕</b>Detectar relacionamentos</button>
+        </div><span>Relacionamentos</span></div>
+        <div class="faixa-grupo"><div>
+          <button class="ferr" type="button" data-modelo="organizar"><b>▦</b>Organizar cartões</button>
+        </div><span>Exibir</span></div>
+        <div class="faixa-grupo"><div>
+          <button class="ferr" type="button" data-modelo="explorar"><b>Σ</b>Explorar dados</button>
+        </div><span>Testar o modelo</span></div>
+      </div>
+      <div class="modelo-corpo">
+        <div class="modelo-area" id="modelo-area"><div class="modelo-tela" id="modelo-tela"></div></div>
+        <aside class="painel modelo-lado" aria-label="Relacionamentos">
+          <h2 id="titulo-relacoes">Relacionamentos</h2>
+          <ul class="lista" id="lista-relacoes"></ul>
+          <div id="detalhe-relacao"></div>
+          <p class="dica-etapa">Arraste uma <b>coluna</b> até a coluna de outro cartão para criar uma relação. Arraste o <b>título</b> do cartão para mudar o lugar. Clique numa linha para ver os detalhes.</p>
+        </aside>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -165,5 +190,7 @@
 <script src="./js/m-motor.js"></script>
 <script src="./js/armazenamento.js"></script>
 <script src="./js/estudio.js"></script>
+<script src="./js/modelo-motor.js"></script>
+<script src="./js/modelo.js"></script>
 </body>
 </html>

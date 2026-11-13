@@ -22,8 +22,11 @@ Ferramenta para **montar bases e relatórios** no estilo Power BI, dentro do nav
 | `js/m-motor.js` | **Motor do M**: tipos, conversões pt-BR, CSV, expressões `each …`, funções M, catálogo de etapas, gerar M, executar. Sem dependências; roda no navegador e no Node |
 | `js/armazenamento.js` | Única porta para salvar/ler consultas. Hoje `localStorage`; na F15 passa a chamar a API (Neon) sem mudar a tela |
 | `js/estudio.js` | Tela: desenha, abre as janelas das ferramentas e liga tudo ao motor |
+| `js/modelo-motor.js` | **Motor do modelo** (E4): analisar relação (cardinalidade, % de correspondência, tipos), sugerir relações, situação (quebrada), caminho pelas relações ativas e `consultarModelo` (agrupa e resume passando pelas relações) |
+| `js/modelo.js` | Tela Modelo e relacionamentos: cartões arrastáveis, linhas 1/∗ em SVG, criar por arrasto ou janela, detectar, editar/ativar/excluir, Explorar dados |
 | `dados-demo/gerar.js` | Gera `atendimentos.csv`, `quadro.csv` e `exemplos.js` (fictícios, semente fixa) |
-| `testes/motor.test.js` | Testes do motor: `node apps/estudio/testes/motor.test.js` |
+| `testes/motor.test.js` | Testes do motor M: `node apps/estudio/testes/motor.test.js` |
+| `testes/modelo.test.js` | Testes do modelo: `node apps/estudio/testes/modelo.test.js` |
 
 ## Como o motor funciona
 
@@ -55,6 +58,15 @@ Ferramenta para **montar bases e relatórios** no estilo Power BI, dentro do nav
 - Tabela interna = `{ colunas: [{ nome, tipo }], linhas: [[...]] }`. Data = `'AAAA-MM-DD'`, hora = `'HH:MM:SS'`, data e hora = `'AAAA-MM-DDTHH:MM:SS'`.
 - Expressões aceitas: `[Coluna]`, números, `"textos"`, `true/false/null`, `+ - * / &`, `= <> < <= > >=`, `and or not`, `if … then … else …`, `#date(a,m,d)`, `#time(h,m,s)` e as funções de `FUNCOES_M` (cada uma com grupo, sintaxe, descrição, equivalente no Excel e exemplo — base da futura central de funções, E5).
 
+## Modelo (E4)
+
+- Guardado junto das consultas: `modelo = { relacionamentos: [...], posicoes: { consulta: {x, y} } }`.
+- Relação = `{ id, de: {consulta, coluna}, para: {consulta, coluna}, cardinalidade: 'N:1'|'1:1'|'N:N', direcao: 'unica'|'ambas', ativo }`. **`de` é o lado ∗ e `para` é o lado 1**; o Estúdio descobre isso sozinho (o lado com valores únicos é o 1).
+- Como no Power BI: entre as mesmas duas tabelas só uma relação ativa (a nova entra inativa); tipos diferentes ou nenhum valor em comum bloqueiam; ∗:∗ é permitido com aviso; linhas sem par vão para "(em branco)".
+- O filtro anda do 1 para o ∗ (direção única) ou nos dois sentidos (ambas). `consultarModelo` leva cada linha da tabela do valor até a do grupo seguindo esse caminho — é o que os Relatórios e o DAX vão usar.
+- Renomear consulta atualiza as relações; excluir consulta remove as relações dela; coluna renomeada no Transformar dados deixa a relação "quebrada" (linha vermelha tracejada) com o motivo.
+- Demonstração começa com `atendimentos[MATRICULA] ∗—1 quadro[MATRICULA]`.
+
 **Por que JavaScript e não DuckDB nesta etapa:** abre na hora, sem baixar ~30 MB, roda nos testes do Node e cobre bem as bases da demonstração (milhares de linhas). O Estúdio do DashBI usa DuckDB para bases grandes; quando as bases do Neon chegarem, o executor de cada etapa pode passar a gerar SQL sem mudar o catálogo nem a tela.
 
 ## Etapas do Estúdio (pendências do módulo)
@@ -63,7 +75,7 @@ Ferramenta para **montar bases e relatórios** no estilo Power BI, dentro do nav
 - [x] **E2** — Editor de M (12/11/2026; filtro revisado em 13/11: editar filtro existente, lista de valores própria, condição sem valor bloqueia; um conector por nível + grupos (parênteses) + "Lendo como" em português): barra `fx` editável (Enter aplica, Esc cancela) e Editor avançado (`let … in`, Ctrl+Enter aplica). `lerM`/`lerLinhaEtapa` no motor fazem o caminho de volta do `gerarM`; cada etapa precisa usar a etapa logo acima; funções fora do catálogo dão mensagem com a lista aceita. Filtro com várias condições (+/×) e E/OU antes de cada uma.
 - [ ] Editar etapa pela janela da ferramenta (engrenagem), com o formulário já preenchido
 - [x] **E3** — Mesclar (6 junções, várias chaves, prévia de % de correspondência; colunas a trazer com nome final editável, prefixo opcional desligado, ✎ na etapa Expandido para mudar depois), Acrescentar e Agrupar (13/11/2026). Importação já cria a etapa Espaços Removidos.
-- [ ] **E4** — Modelo e relacionamentos (1:N, chave única, % de correspondência; visuais e DAX filtram pelas ligações)
+- [x] **E4** — Modelo e relacionamentos (13/11/2026): cartões, linhas 1/∗, criar arrastando coluna, detectar, validação ao vivo, direção do filtro, ativa/inativa, Explorar dados. O DAX passa a usar o modelo quando as Medidas vierem.
 - [ ] **E5** — Central de funções M e DAX
 - [ ] **E6** — Leitor de fórmulas
 - [ ] Trazer Relatórios e Medidas DAX do Estúdio do DashBI
@@ -71,4 +83,5 @@ Ferramenta para **montar bases e relatórios** no estilo Power BI, dentro do nav
 ## Como testar localmente
 
 1. `node apps/estudio/testes/motor.test.js` — deve terminar com "15 testes passaram."
-2. Abrir `apps/estudio/index.html` com o Live Server (ou `python3 -m http.server` dentro de `apps/estudio`).
+2. `node apps/estudio/testes/modelo.test.js` — deve terminar com "6 testes passaram."
+3. Abrir `apps/estudio/index.html` com o Live Server (ou `python3 -m http.server` dentro de `apps/estudio`).
